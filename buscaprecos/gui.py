@@ -430,20 +430,26 @@ class Janela:
         self.trabalhando = True
         self.bt_buscar.configure(state="disabled")
         self.bt_diagnostico.configure(state="disabled")
-        self.var_status.set("Rodando diagnóstico…")
-        self._log("--- diagnóstico ---")
+        self.var_status.set("Rodando diagnóstico… (1 a 2 min)")
+        self._log("--- diagnóstico: leva 1 a 2 minutos, com esperas "
+                  "propositais entre os testes ---")
 
         def trabalhar() -> None:
-            from .diagnostico import executar
-
+            # TUDO dentro do try, inclusive o import. Com o import fora, um
+            # ImportError matava a thread antes do primeiro `put`: nada chegava
+            # à interface e a janela ficava "Rodando diagnóstico…" para sempre,
+            # com os botões desabilitados. Thread de trabalho que não avisa que
+            # morreu é pior que erro na tela.
             try:
+                from .diagnostico import executar
+
                 destino = executar(
                     self.raiz_projeto,
                     self.raiz_payload,
                     ao_progredir=lambda linha: self.fila.put(MsgLog(linha)),
                 )
                 self.fila.put(MsgDiagnostico(destino))
-            except Exception as exc:
+            except BaseException as exc:
                 self.fila.put(MsgDiagnostico(
                     None, erro=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
                 ))
@@ -505,7 +511,16 @@ class Janela:
             rotulo.configure(text="—")
         self.var_status.set("Buscando…")
 
-        threading.Thread(target=self._trabalhar, args=(caminho,), daemon=True).start()
+        def envelope() -> None:
+            try:
+                self._trabalhar(caminho)
+            except BaseException as exc:  # rede de segurança da thread
+                self.fila.put(MsgFim(
+                    saida=None, resumo="", avisos=[],
+                    erro=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}",
+                ))
+
+        threading.Thread(target=envelope, daemon=True).start()
 
     def _trabalhar(self, caminho: Path) -> None:
         """Roda na thread de trabalho. Só fala com a interface pela fila."""

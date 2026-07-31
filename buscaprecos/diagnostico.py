@@ -23,6 +23,23 @@ LINHAS: list[str] = []
 
 
 _AO_PROGREDIR: Any = None
+_INICIO: float = 0.0
+
+# Intervalo entre os testes de transporte. Era 20s por hipótese de que ritmo
+# rápido contaminaria o teste seguinte; o primeiro diagnóstico refutou isso
+# (403 em todas as velocidades, e 200 em todas na outra rede), então o WAF não
+# está medindo cadência. 8s é folga suficiente e corta metade do tempo.
+ESPERA_ENTRE_TESTES = 8
+
+
+def esperar(segundos: int, motivo: str = "") -> None:
+    """Espera anunciando, porque silêncio de 20s parece programa travado."""
+    diga(f"  … aguardando {segundos}s{(' ' + motivo) if motivo else ''}")
+    time.sleep(segundos)
+
+
+def decorrido() -> str:
+    return f"{time.monotonic() - _INICIO:.0f}s"
 
 
 def diga(texto: str = "") -> None:
@@ -103,6 +120,7 @@ DESC_TESTE = "REFRIG COCA COLA LT 350ML ORIG"
 
 def lojas(raiz: Path, raiz_payload: Path | None) -> None:
     secao("LOJAS (uma consulta cada)")
+    diga("uma loja bloqueada leva ~1 min esgotando as tentativas — é normal")
     try:
         from buscaprecos.busca import Buscador
         from buscaprecos.config import carregar_config
@@ -116,6 +134,7 @@ def lojas(raiz: Path, raiz_payload: Path | None) -> None:
     for loja in cfg.lojas.values():
         if not loja.consulta_rede:
             continue
+        diga(f"  {loja.nome}…")
         inicio = time.monotonic()
         try:
             cliente = buscador._criar_cliente(loja)
@@ -176,7 +195,7 @@ def araujo() -> None:
         diga(f"  {rotulo:26} {str(codigos):34} preço: {achou}/{len(EANS)}  {marca}")
         return achou > 0
 
-    diga("(20s de espera entre blocos, para não contaminar o seguinte)")
+    diga(f"({ESPERA_ENTRE_TESTES}s entre blocos; o total roda em 1 a 2 minutos)")
     diga()
 
     funcionou: list[str] = []
@@ -185,13 +204,13 @@ def araujo() -> None:
     if medir("padrao", nova_sessao()):
         funcionou.append("padrao")
 
-    time.sleep(20)
+    esperar(ESPERA_ENTRE_TESTES, "antes do próximo transporte")
     diga("2) tls_navegador — TLS ajustado, só biblioteca padrão:")
     diga("   (se este funcionar, resolve por atualização, sem regerar o .exe)")
     if medir("tls_navegador", sessao_tls_navegador()):
         funcionou.append("tls_navegador")
 
-    time.sleep(20)
+    esperar(ESPERA_ENTRE_TESTES, "antes do próximo transporte")
     diga("3) curl_cffi — imita a impressão digital do Chrome de fato:")
     sessao_cffi = sessao_curl_cffi()
     if sessao_cffi is None:
@@ -199,7 +218,7 @@ def araujo() -> None:
     elif medir("curl_cffi", sessao_cffi):
         funcionou.append("curl_cffi")
 
-    time.sleep(20)
+    esperar(ESPERA_ENTRE_TESTES, "antes do próximo transporte")
     diga("4) navegador — Playwright com o Edge do Windows:")
     try:
         from playwright.sync_api import sync_playwright
@@ -250,3 +269,48 @@ def araujo() -> None:
     else:
         diga("CONCLUSÃO: nenhum transporte disponível passou. Instale curl_cffi")
         diga("           ou playwright e rode o diagnóstico de novo.")
+
+
+def executar(
+    raiz: Path,
+    raiz_payload: Path | None = None,
+    *,
+    ao_progredir: Any = None,
+) -> Path:
+    """Roda tudo e grava `diagnostico.txt`. Devolve o caminho do arquivo.
+
+    Esta função já foi perdida uma vez: uma edição que reescreveu `araujo()`
+    truncou o arquivo daqui para baixo, e as versões 1.0.3 a 1.0.7 saíram sem
+    ela. O botão da interface importava `executar` fora do `try`, então o
+    ImportError matava a thread em silêncio e a janela ficava "Rodando
+    diagnóstico…" para sempre. Ver `test_smoke.py`, que agora confere a
+    existência dos pontos de entrada.
+    """
+    global _INICIO, _AO_PROGREDIR
+    _INICIO = time.monotonic()
+    _AO_PROGREDIR = ao_progredir
+    LINHAS.clear()
+
+    diga("DIAGNÓSTICO — Busca de Preços")
+    diga(f"gerado em {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    try:
+        ambiente(raiz)
+        arquivos(raiz, raiz_payload)
+        lojas(raiz, raiz_payload)
+        araujo()
+    except Exception as exc:
+        import traceback
+
+        diga()
+        diga("=" * 66)
+        diga(f"O DIAGNÓSTICO FALHOU NO MEIO: {type(exc).__name__}: {exc}")
+        diga(traceback.format_exc())
+        diga("O que veio até aqui ainda serve — mande o arquivo.")
+
+    diga()
+    diga(f"tempo total: {decorrido()}")
+    destino = raiz / "diagnostico.txt"
+    destino.write_text("\n".join(LINHAS) + "\n", encoding="utf-8")
+    diga("=" * 66)
+    diga(f"salvo em {destino}")
+    return destino
