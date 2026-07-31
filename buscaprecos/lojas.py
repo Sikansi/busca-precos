@@ -467,7 +467,9 @@ class ClienteEstoque:
         return mapa
 
     def _carregar(self) -> None:
-        if not self.caminho.exists():
+        # Caminho vazio no config resolve para a pasta do programa; pasta não
+        # é planilha, então is_file() e não exists().
+        if not self.caminho.is_file():
             return
         linhas = self._linhas_do_arquivo()
         if not linhas:

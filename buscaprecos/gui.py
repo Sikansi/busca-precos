@@ -123,7 +123,7 @@ class Janela:
         caixa.columnconfigure(0, weight=1)
 
         padrao = self.cfg.caminho("planilha")
-        self.var_planilha = tk.StringVar(value=str(padrao) if padrao.exists() else "")
+        self.var_planilha = tk.StringVar(value=str(padrao) if padrao.is_file() else "")
         ttk.Entry(caixa, textvariable=self.var_planilha).grid(
             row=0, column=0, sticky="ew", padx=(0, 8)
         )
@@ -141,7 +141,7 @@ class Janela:
             row=1, column=0, sticky="w", pady=(8, 0)
         )
         estoque = self.cfg.caminho("estoque")
-        self.var_estoque = tk.StringVar(value=str(estoque) if estoque.exists() else "")
+        self.var_estoque = tk.StringVar(value=str(estoque) if estoque.is_file() else "")
         ttk.Entry(caixa, textvariable=self.var_estoque).grid(
             row=2, column=0, sticky="ew", padx=(0, 8)
         )

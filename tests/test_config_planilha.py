@@ -173,3 +173,62 @@ def test_consequencia_documentada_para_cada_coluna_opcional():
     assert opcionais <= set(CONSEQUENCIA_SE_FALTAR), (
         "toda coluna opcional precisa explicar na tela o que se perde sem ela"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Instalação limpa (sem config.json)
+# --------------------------------------------------------------------------- #
+
+def test_sem_config_json_o_ota_continua_configurado(tmp_path):
+    """A pasta enviada ao cliente não leva `config.json`.
+
+    Ele tem os caminhos das planilhas da máquina de desenvolvimento, que não
+    existem na do cliente. Mas a URL de atualização precisa sobreviver a essa
+    remoção, senão a instalação nasce sem OTA e nunca recebe correção.
+    """
+    import json
+    import shutil
+
+    dados = tmp_path / "app"
+    payload = dados / "payload" / "1.0.5"
+    payload.mkdir(parents=True)
+    shutil.copy2(RAIZ / "config.padrao.json", payload / "config.padrao.json")
+    shutil.copy2(RAIZ / "categorias.csv", payload / "categorias.csv")
+
+    assert not (dados / "config.json").exists()
+    cfg = carregar_config(dados, payload)
+    assert (dados / "config.json").is_file(), "config.json tem que nascer do padrão"
+    assert cfg.atualizacao["url_version_json"].startswith("http"), (
+        "sem URL, a instalação nova nunca se atualiza"
+    )
+    gravado = json.loads((dados / "config.json").read_text(encoding="utf-8"))
+    assert gravado["lojas"], "o padrão tem que trazer as lojas cadastradas"
+
+
+def test_padrao_nao_carrega_caminho_da_maquina_de_desenvolvimento():
+    """`planilha` e `estoque` em branco no seed.
+
+    Com os nomes dos meus arquivos, o diagnóstico do cliente reportaria
+    "FALTANDO — Compras_Consolidadas…", que é ruído confuso: o arquivo não
+    está faltando, ele nunca foi escolhido.
+    """
+    import json
+
+    padrao = json.loads((RAIZ / "config.padrao.json").read_text(encoding="utf-8"))
+    assert padrao["arquivos"]["planilha"] == ""
+    assert padrao["arquivos"]["estoque"] == ""
+
+
+def test_caminho_vazio_nao_vira_a_pasta_do_programa(tmp_path):
+    """Caminho em branco resolve para a pasta, e pasta "existe".
+
+    Sem `is_file()`, o campo da tela apareceria preenchido com o caminho de uma
+    pasta e o leitor de estoque tentaria abri-la como planilha.
+    """
+    import shutil
+
+    shutil.copy2(RAIZ / "config.padrao.json", tmp_path / "config.padrao.json")
+    shutil.copy2(RAIZ / "categorias.csv", tmp_path / "categorias.csv")
+    cfg = carregar_config(tmp_path)
+    assert not cfg.caminho("planilha").is_file()
+    assert not cfg.caminho("estoque").is_file()

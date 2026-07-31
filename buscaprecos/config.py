@@ -78,11 +78,11 @@ class Config:
         """
         nome = self.arquivos[chave]
         do_cliente = (self.raiz / nome).resolve()
-        if do_cliente.exists():
+        if do_cliente.is_file():
             return do_cliente
         if self.raiz_payload is not None:
             do_payload = (self.raiz_payload / nome).resolve()
-            if do_payload.exists():
+            if do_payload.is_file():
                 return do_payload
         return do_cliente  # ainda não existe: será criado nos dados do cliente
 

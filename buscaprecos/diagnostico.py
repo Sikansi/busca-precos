@@ -73,8 +73,9 @@ def arquivos(raiz: Path, raiz_payload: Path | None) -> None:
             caminho = cfg.caminho(chave)
         except KeyError:
             continue
-        if not caminho.exists():
-            diga(f"{chave:14} : FALTANDO — {caminho}")
+        if not caminho.is_file():
+            nome = cfg.arquivos.get(chave) or "(não definido)"
+            diga(f"{chave:14} : não definido ou faltando — {nome}")
             continue
         tamanho = caminho.stat().st_size // 1024
         extra = ""

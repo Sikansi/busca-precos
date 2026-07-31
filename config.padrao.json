@@ -1,11 +1,12 @@
 {
   "cep": "30110-010",
   "arquivos": {
-    "planilha": "Compras_Consolidadas_categorizado_2507 1020 - Compras_Consolidadas_com_precos.xlsx",
-    "estoque": "Relatorio_planograma 2026-07-02 08_11_14 (1) - Estoque.csv",
+    "planilha": "",
+    "estoque": "",
     "categorias": "categorias.csv",
     "cache": "cache_precos.sqlite",
-    "log": "busca_precos_compras_log.json"
+    "log": "busca_precos_compras_log.json",
+    "_comentario": "planilha e estoque vazios de proposito: o cliente aponta pela tela e o programa grava aqui"
   },
   "colunas": {
     "ean": "EAN/GTIN",

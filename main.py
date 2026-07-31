@@ -62,7 +62,7 @@ def main() -> int:
 
     cfg = carregar_config(RAIZ)
     caminho = Path(args.planilha) if args.planilha else cfg.caminho("planilha")
-    if not caminho.exists():
+    if not caminho.is_file():
         print(f"ERRO: planilha não encontrada: {caminho}", file=sys.stderr)
         return 2
 
