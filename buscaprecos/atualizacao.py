@@ -15,8 +15,8 @@ sobrescrito, e não precisa de permissão de administrador.
 
 Fluxo de publicação (na sua máquina):
 
-    python publicar.py 1.1.0        # gera payload-1.1.0.zip + version.json
-    # sobe os dois num Release do GitHub (URL estática, de graça)
+    python build.py 1.1.0 --sem-exe   # gera payload-1.1.0.zip + version.json
+    gh release create v1.1.0 dist/payload-1.1.0.zip dist/version.json
 
 Fluxo no cliente:
 
@@ -81,7 +81,18 @@ def checar(url_version_json: str) -> Atualizacao | None:
         return None
     try:
         sessao = nova_sessao(tentativas=1)
-        resp = sessao.get(url_version_json, timeout=TIMEOUT)
+        # O CDN do GitHub serve `releases/latest/download/` com cache: medi
+        # `Age: 769` devolvendo a versão anterior quase 13 minutos depois de
+        # publicar a nova. Sem furar esse cache, o cliente demora — ou deixa —
+        # de ver a atualização.
+        resp = sessao.get(
+            url_version_json,
+            timeout=TIMEOUT,
+            headers={
+                "Cache-Control": "no-cache, no-store, max-age=0",
+                "Pragma": "no-cache",
+            },
+        )
         if resp.status_code != 200:
             return None
         dados = resp.json()
@@ -203,6 +214,22 @@ def limpar_antigas(pasta_payload: Path | str, manter: int = 2) -> list[str]:
         shutil.rmtree(pasta_payload / v, ignore_errors=True)
         removidas.append(v)
     return removidas
+
+
+def url_do_asset(base_releases: str, versao: str, nome_arquivo: str) -> str:
+    """URL fixada na tag, não em `latest`.
+
+    `releases/latest/download/payload-1.0.4.zip` devolve 404 no instante em que
+    a 1.0.5 sai — o asset só existe no release dele. Um `version.json` em cache
+    apontando para lá manda o cliente buscar um arquivo que não existe mais.
+    `releases/download/v1.0.4/payload-1.0.4.zip` vale para sempre.
+    """
+    base = base_releases.rstrip("/")
+    # Aceita a forma antiga (.../releases/latest/download) sem quebrar.
+    for sufixo in ("/latest/download", "/download"):
+        if base.endswith(sufixo):
+            base = base[: -len(sufixo)]
+    return f"{base}/download/v{versao}/{nome_arquivo}"
 
 
 def gerar_version_json(

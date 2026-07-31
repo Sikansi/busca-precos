@@ -134,12 +134,12 @@ def rodar_pyinstaller() -> None:
 def escrever_version_json(caminho_zip: Path, versao: str, base_url: str,
                           notas: str, obrigatoria: bool) -> Path:
     sys.path.insert(0, str(RAIZ))
-    from buscaprecos.atualizacao import gerar_version_json
+    from buscaprecos.atualizacao import gerar_version_json, url_do_asset
 
     manifesto = gerar_version_json(
         caminho_zip,
         versao,
-        f"{base_url.rstrip('/')}/{caminho_zip.name}",
+        url_do_asset(base_url, versao, caminho_zip.name),
         notas=notas,
         obrigatoria=obrigatoria,
     )
@@ -163,7 +163,8 @@ def main() -> int:
     parser.add_argument(
         "--base-url",
         default=None,
-        help="Base da URL dos arquivos de release (fica lembrada)",
+        help=("Base dos releases, ex.: "
+              "https://github.com/USUARIO/REPO/releases (fica lembrada)"),
     )
     args = parser.parse_args()
 

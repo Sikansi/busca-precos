@@ -250,3 +250,45 @@ def test_sessao_tls_navegador_usa_cifras_de_navegador():
     assert "CHACHA20" in CIFRAS_NAVEGADOR
     sessao = sessao_tls_navegador()
     assert sessao.adapters["https://"].__class__.__name__ == "_AdaptadorTlsNavegador"
+
+
+# --------------------------------------------------------------------------- #
+# URL de atualização
+# --------------------------------------------------------------------------- #
+
+def test_url_do_asset_fixa_na_tag_e_nao_em_latest():
+    """`latest/download/payload-1.0.4.zip` vira 404 quando a 1.0.5 sai.
+
+    Medido: o asset só existe no release dele. Um version.json em cache
+    apontando para `latest` manda o cliente buscar arquivo inexistente.
+    """
+    from buscaprecos.atualizacao import url_do_asset
+
+    url = url_do_asset(
+        "https://github.com/Sikansi/busca-precos/releases", "1.0.6",
+        "payload-1.0.6.zip",
+    )
+    assert url.endswith("/releases/download/v1.0.6/payload-1.0.6.zip")
+    assert "/latest/" not in url
+
+
+@pytest.mark.parametrize("base", [
+    "https://github.com/U/R/releases",
+    "https://github.com/U/R/releases/",
+    "https://github.com/U/R/releases/latest/download",   # forma antiga
+    "https://github.com/U/R/releases/download",
+])
+def test_url_do_asset_aceita_as_bases_antigas(base):
+    from buscaprecos.atualizacao import url_do_asset
+
+    assert (url_do_asset(base, "2.0.0", "p.zip")
+            == "https://github.com/U/R/releases/download/v2.0.0/p.zip")
+
+
+def test_versao_compara_numericamente():
+    from buscaprecos.atualizacao import mais_nova
+
+    assert mais_nova("1.0.10", "1.0.9"), "comparação alfabética diria o contrário"
+    assert mais_nova("1.10.0", "1.9.0")
+    assert not mais_nova("1.0.5", "1.0.5")
+    assert not mais_nova("1.0.4", "1.0.5")
