@@ -211,16 +211,26 @@ def test_estoque_reconhece_apelidos_de_coluna(tmp_path):
 # Transportes do Araújo
 # --------------------------------------------------------------------------- #
 
-def test_transportes_vao_do_mais_barato_ao_mais_garantido():
+def test_tls_navegador_vem_antes_do_padrao():
+    """Medido: `padrao` deu 403 numa rede e 200 na outra; `tls_navegador` deu
+    200 nas duas. Começar pelo que falha custa duas requisições negadas e
+    ~4s de recuo antes de trocar."""
     from buscaprecos.lojas import ClienteAraujo
 
-    assert ClienteAraujo.TRANSPORTES.index("padrao") == 0
-    assert (ClienteAraujo.TRANSPORTES.index("tls_navegador")
-            < ClienteAraujo.TRANSPORTES.index("curl_cffi")
-            < ClienteAraujo.TRANSPORTES.index("navegador")), (
-        "os dois primeiros usam só a biblioteca padrão e chegam por "
-        "atualização de payload; os outros exigem regerar o executável"
-    )
+    ordem = ClienteAraujo.TRANSPORTES
+    assert ordem[0] == "tls_navegador"
+    assert ordem.index("tls_navegador") < ordem.index("padrao")
+
+
+def test_dependencias_binarias_ficam_no_fim():
+    """Só os dois primeiros chegam por atualização de payload; os outros
+    exigem regerar o executável, então são último recurso."""
+    from buscaprecos.lojas import ClienteAraujo
+
+    ordem = ClienteAraujo.TRANSPORTES
+    sem_dependencia = {"tls_navegador", "padrao"}
+    assert set(ordem[:2]) == sem_dependencia
+    assert ordem.index("curl_cffi") < ordem.index("navegador")
 
 
 def test_auto_troca_de_transporte_e_registra():
@@ -228,10 +238,10 @@ def test_auto_troca_de_transporte_e_registra():
     from buscaprecos.rede import nova_sessao
 
     cliente = ClienteAraujo("ARAUJO", nova_sessao(), transporte="auto")
-    assert cliente.transporte == "padrao"
-    assert cliente._proximo_transporte()
     assert cliente.transporte == "tls_navegador"
-    assert cliente.trocas_de_transporte == ["tls_navegador"]
+    assert cliente._proximo_transporte()
+    assert cliente.transporte == "padrao"
+    assert cliente.trocas_de_transporte == ["padrao"]
 
 
 def test_transporte_fixo_nao_troca_sozinho():

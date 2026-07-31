@@ -139,7 +139,13 @@ class _AdaptadorTlsNavegador(HTTPAdapter):
         import ssl
 
         contexto = ssl.create_default_context()
-        contexto.set_ciphers(CIFRAS_NAVEGADOR)
+        try:
+            contexto.set_ciphers(CIFRAS_NAVEGADOR)
+        except ssl.SSLError:
+            # OpenSSL desta máquina não conhece alguma cifra da lista. Segue
+            # com o contexto padrão em vez de derrubar a busca — o transporte
+            # seguinte assume se este não passar pelo WAF.
+            contexto = ssl.create_default_context()
         # Navegador não manda compressão TLS nem renegociação legada.
         contexto.options |= getattr(ssl, "OP_NO_COMPRESSION", 0)
         contexto.options |= getattr(ssl, "OP_NO_TICKET", 0)

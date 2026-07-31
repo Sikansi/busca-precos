@@ -184,13 +184,41 @@ comum, com três detalhes que fazem funcionar:
    resposta vazia gravaria "não encontrado" em massa, então ele entra em
    espera progressiva e tenta de novo.
 
-Não usa navegador headless: o Chromium resolveria o mesmo problema custando
-~150 MB no instalador. O modo navegador existe como reserva, para o caso de o
-WAF apertar — ligue `busca.araujo_usar_navegador: true` no config e instale:
+### O bloqueio depende da rede, não do ritmo
+
+Medido em duas máquinas, com cabeçalhos e ritmo idênticos:
+
+| Transporte | Linux (dev) | Windows (cliente) |
+| --- | --- | --- |
+| `padrao` (requests comum) | 200 | **403** |
+| `tls_navegador` (TLS ajustado) | 200 | **200** |
+
+Ritmo não muda nada: 1,2s e 5s dão o mesmo resultado nas duas. O que o WAF
+recusa é a **impressão digital do handshake TLS** — ele vê um "Chrome 120"
+cujo TLS é de Python/OpenSSL. `tls_navegador` ajusta a ordem de cifras que o
+Python deixa configurar, e isso bastou.
+
+Por isso `tls_navegador` é o **primeiro** transporte da fila: é o único medido
+funcionando nas duas redes. `padrao` fica atrás como reserva (se o OpenSSL
+local recusar a lista de cifras), e depois dele vêm as opções que exigem
+dependência binária:
+
+| Transporte | Chega por atualização de payload? |
+| --- | --- |
+| `tls_navegador` | **sim** |
+| `padrao` | sim |
+| `curl_cffi` | não — regerar o `.exe` |
+| `navegador` (Playwright + Edge) | não — regerar o `.exe` |
+
+O programa troca sozinho quando toma 403 repetido, então nenhuma configuração
+é necessária. Para fixar um transporte, use `busca.araujo_transporte` no
+config. Para as duas últimas opções:
 
 ```bash
-pip install playwright && python -m playwright install chromium
+pip install curl_cffi
 ```
+
+O botão **Diagnóstico** testa os quatro e diz qual usar.
 
 ## Atualização OTA
 

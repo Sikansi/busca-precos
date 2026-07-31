@@ -626,10 +626,16 @@ class ClienteAraujo:
     )
     RE_EAN_IMG = re.compile(r"/\d{4,7}/(\d{12,14})_\d+\.(?:webp|jpg|jpeg|png)", re.I)
 
-    # Do mais barato ao mais garantido. `padrao` e `tls_navegador` só usam a
-    # biblioteca padrão, então chegam por atualização de payload; os outros
-    # dois são dependência binária e exigem regerar o executável.
-    TRANSPORTES = ("padrao", "tls_navegador", "curl_cffi", "navegador")
+    # `tls_navegador` vem primeiro porque foi medido funcionando nas duas
+    # redes testadas (200/200), enquanto `padrao` funciona só em uma (403 no
+    # Windows do cliente, 200 no Linux do desenvolvedor). Começar pelo que
+    # falha custava duas requisições negadas e ~4s de recuo antes de trocar.
+    # `padrao` fica logo atrás como reserva: se o OpenSSL local recusar a
+    # lista de cifras, ainda há um caminho.
+    # Os dois primeiros usam só a biblioteca padrão e chegam por atualização
+    # de payload; os outros dois são dependência binária e exigem regerar o
+    # executável.
+    TRANSPORTES = ("tls_navegador", "padrao", "curl_cffi", "navegador")
 
     def __init__(
         self,
@@ -653,7 +659,7 @@ class ClienteAraujo:
         if usar_navegador:
             transporte = "navegador"
         self._auto = transporte == "auto"
-        self.transporte = "padrao" if self._auto else transporte
+        self.transporte = self.TRANSPORTES[0] if self._auto else transporte
         self._transportes_tentados: list[str] = []
         self._sessao_alternativa: Any = None
         self.trocas_de_transporte: list[str] = []
@@ -695,6 +701,10 @@ class ClienteAraujo:
                 self._sessao_alternativa = sessao_tls_navegador()
             elif self.transporte == "curl_cffi":
                 self._sessao_alternativa = sessao_curl_cffi()
+        # Transporte que não conseguiu montar sessão não pode travar a busca:
+        # cai para o seguinte.
+        if self._sessao_alternativa is None and self._proximo_transporte():
+            return self._obter_sessao()
         return self._sessao_alternativa
 
     # Hipótese testada e descartada: visitar a home antes de buscar não
