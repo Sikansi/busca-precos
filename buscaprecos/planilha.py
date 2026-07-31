@@ -354,6 +354,19 @@ class Planilha:
                 f"{formulas_preservadas} célula(s) com fórmula preservada(s) — "
                 "o cálculo do Excel tem prioridade"
             )
+
+        # Trocar a extensão não basta. Um .xltx declara, dentro do zip, o tipo
+        # "…spreadsheetml.template.main+xml". Salvo com nome .xlsx, o Excel
+        # compara extensão e conteúdo, vê divergência e recusa o arquivo:
+        # "o formato ou a extensão não é válida… verifique se não está
+        # corrompido". O Google Sheets é tolerante e abre, o que faz o defeito
+        # parecer problema do Excel. `template` é justamente a chave que o
+        # openpyxl usa para escolher esse tipo.
+        if saida.suffix.lower() in {".xlsx", ".xlsm"}:
+            self._wb.template = False
+        elif saida.suffix.lower() in {".xltx", ".xltm"}:
+            self._wb.template = True
+
         self._wb.save(saida)
 
     def _valor_para_celula(self, coluna: str, texto: str) -> Any:

@@ -373,7 +373,12 @@ preto atrás da janela) e UPX desligado (aumenta falso-positivo).
   em unidade diferente do preço de varejo (custo por unidade dentro de uma
   caixa de 21 × preço do pacote na prateleira). É problema do dado de
   entrada, não do cálculo — vale conferir com o cliente.
-- O xlsx atual **já perdeu as fórmulas** num ida-e-volta por CSV anterior; as
-  857 fórmulas originais só existem em
-  `Compras_Consolidadas_categorizado_2507 1020.xltx`. Para recuperá-las,
-  rode sobre uma cópia do template em vez da planilha achatada.
+- O xlsx que circulava **já tinha perdido as fórmulas** num ida-e-volta por
+  CSV anterior; as originais só existem em
+  `Compras_Consolidadas_categorizado_2507 1020.xltx`. **Rodar sobre o template
+  é a melhor opção**: as fórmulas voltam (medido: 4.445 preservadas) e a saída
+  sai como `.xlsx` normal.
+- Template salvo com nome `.xlsx` mas declarando `template` por dentro faz o
+  Excel recusar o arquivo ("o formato ou a extensão não é válida"), enquanto o
+  Google Sheets abre — o que faz o defeito parecer problema do Excel. Por isso
+  `_salvar_xlsx` ajusta `Workbook.template` conforme a extensão de saída.

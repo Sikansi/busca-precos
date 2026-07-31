@@ -7,6 +7,6 @@ a pasta inteira com o app aberto. Ver `atualizacao.py`.
 
 from __future__ import annotations
 
-VERSION = "1.0.9"
+VERSION = "1.0.10"
 
 __all__ = ["VERSION"]

@@ -302,3 +302,81 @@ def test_versao_compara_numericamente():
     assert mais_nova("1.10.0", "1.9.0")
     assert not mais_nova("1.0.5", "1.0.5")
     assert not mais_nova("1.0.4", "1.0.5")
+
+
+# --------------------------------------------------------------------------- #
+# Conversão de template
+# --------------------------------------------------------------------------- #
+
+def _tipo_declarado(caminho) -> str:
+    """O tipo que o arquivo declara internamente: 'sheet' ou 'template'."""
+    import re
+    import zipfile
+
+    with zipfile.ZipFile(caminho) as z:
+        xml = z.read("[Content_Types].xml").decode()
+    m = re.search(r'PartName="/xl/workbook\.xml"\s+ContentType="([^"]+)"', xml)
+    assert m, "não achei o tipo do workbook"
+    return m.group(1).rsplit(".", 2)[-2]
+
+
+def _template(tmp_path, nome="modelo.xltx"):
+    import openpyxl
+
+    caminho = tmp_path / nome
+    wb = openpyxl.Workbook()
+    wb.template = True
+    ws = wb.active
+    ws["A1"] = "Descrição do Produto"
+    ws["A2"] = "ARROZ PRATO FINO 1KG"
+    wb.save(caminho)
+    assert _tipo_declarado(caminho) == "template"
+    return caminho
+
+
+def test_saida_de_template_declara_planilha_e_nao_template(tmp_path):
+    """Trocar só a extensão faz o Excel recusar o arquivo.
+
+    O .xltx declara "…template.main+xml" dentro do zip. Salvo com nome .xlsx,
+    o Excel compara extensão e conteúdo e devolve "o formato ou a extensão não
+    é válida". O Google Sheets abre, o que faz parecer problema do Excel.
+    """
+    from buscaprecos.planilha import Planilha
+
+    planilha = Planilha.carregar(_template(tmp_path),
+                                 coluna_chave="Descrição do Produto")
+    saida = planilha.salvar(["MENOR PREÇO"])
+    assert saida.suffix == ".xlsx"
+    assert _tipo_declarado(saida) == "sheet", (
+        "arquivo com nome .xlsx declarando template: o Excel recusa"
+    )
+
+
+def test_saida_de_xlsx_continua_planilha(tmp_path):
+    import openpyxl
+
+    from buscaprecos.planilha import Planilha
+
+    origem = tmp_path / "planilha.xlsx"
+    wb = openpyxl.Workbook()
+    wb.active["A1"] = "Descrição do Produto"
+    wb.active["A2"] = "ARROZ"
+    wb.save(origem)
+
+    planilha = Planilha.carregar(origem, coluna_chave="Descrição do Produto")
+    saida = planilha.salvar(["MENOR PREÇO"])
+    assert _tipo_declarado(saida) == "sheet"
+
+
+def test_saida_pode_abrir_no_openpyxl_de_novo(tmp_path):
+    """Ida e volta: o arquivo gerado tem que ser legível como planilha."""
+    import openpyxl
+
+    from buscaprecos.planilha import Planilha
+
+    planilha = Planilha.carregar(_template(tmp_path),
+                                 coluna_chave="Descrição do Produto")
+    saida = planilha.salvar(["MENOR PREÇO"])
+    wb = openpyxl.load_workbook(saida)
+    assert wb.template is False
+    assert wb.active["A2"].value == "ARROZ PRATO FINO 1KG"
