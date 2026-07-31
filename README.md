@@ -220,7 +220,33 @@ recente.
 A URL de atualização vai dentro do payload (em `config.padrao.json`) e é o
 **único** campo que uma atualização pode preencher no `config.json` do cliente,
 e só quando está em branco: é infraestrutura, não preferência. Sem isso, uma
-instalação antiga com o campo vazio nunca receberia correção. O cliente abre o app, ele consulta o `version.json`,
+instalação antiga com o campo vazio nunca receberia correção — e a pasta
+enviada ao cliente **não leva `config.json`** (ele tem os caminhos das
+planilhas da máquina de desenvolvimento), então o seed é o único lugar onde
+essa URL pode estar.
+
+### Duas armadilhas do GitHub Releases
+
+Descobertas publicando de verdade, as duas silenciosas:
+
+1. **`releases/latest/download/` é servido com cache.** Medi `Age: 769` —
+   quase 13 minutos devolvendo a versão anterior depois de publicar a nova. A
+   checagem manda `Cache-Control: no-cache`; sem isso o cliente demora, ou
+   deixa, de ver a atualização.
+2. **`releases/latest/download/payload-1.0.4.zip` vira 404** no instante em
+   que a 1.0.5 sai, porque o asset só existe no release dele. Combinado com o
+   cache acima, um `version.json` velho manda o cliente buscar arquivo que não
+   existe mais. Por isso `url_zip` é **fixada na tag**
+   (`releases/download/v1.0.6/…`), que vale para sempre — é o que
+   `url_do_asset()` garante.
+
+Se um `version.json` já foi publicado com URL em `latest`, dá para consertar
+sem apagar release: anexe o payload antigo também ao release novo, e o caminho
+volta a resolver.
+
+```bash
+gh release upload v1.0.6 payload-1.0.5.zip
+``` O cliente abre o app, ele consulta o `version.json`,
 mostra "Nova versão 1.1.0 disponível", e ao clicar baixa, confere o SHA-256,
 extrai e reinicia. A versão anterior fica no disco — é o rollback.
 
