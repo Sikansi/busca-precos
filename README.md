@@ -205,8 +205,22 @@ Publicar uma versão:
 python build.py 1.1.0 --sem-exe --notas "corrige match do Atacadão"
 ```
 
-Isso gera `dist/payload-1.1.0.zip` e `dist/version.json`; suba os dois no
-mesmo Release do GitHub. O cliente abre o app, ele consulta o `version.json`,
+```bash
+gh release create v1.1.0 dist/payload-1.1.0.zip dist/version.json --notes "o que mudou"
+```
+
+A base da URL fica lembrada em `.build.json` depois da primeira vez — sem isso
+é fácil gerar um `version.json` apontando para o lugar errado e a atualização
+falhar em silêncio.
+
+Publicado em <https://github.com/Sikansi/busca-precos/releases>. O app consulta
+`releases/latest/download/version.json`, que sempre resolve para o release mais
+recente.
+
+A URL de atualização vai dentro do payload (em `config.padrao.json`) e é o
+**único** campo que uma atualização pode preencher no `config.json` do cliente,
+e só quando está em branco: é infraestrutura, não preferência. Sem isso, uma
+instalação antiga com o campo vazio nunca receberia correção. O cliente abre o app, ele consulta o `version.json`,
 mostra "Nova versão 1.1.0 disponível", e ao clicar baixa, confere o SHA-256,
 extrai e reinicia. A versão anterior fica no disco — é o rollback.
 
