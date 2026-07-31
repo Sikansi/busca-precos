@@ -1,0 +1,114 @@
+{
+  "cep": "30110-010",
+  "arquivos": {
+    "planilha": "Compras_Consolidadas_categorizado_2507 1020 - Compras_Consolidadas_com_precos.xlsx",
+    "estoque": "Relatorio_planograma 2026-07-02 08_11_14 (1) - Estoque.csv",
+    "categorias": "categorias.csv",
+    "cache": "cache_precos.sqlite",
+    "log": "busca_precos_compras_log.json"
+  },
+  "colunas": {
+    "ean": "EAN/GTIN",
+    "descricao": "Descrição do Produto",
+    "codigo_interno": "Código Interno",
+    "custo": "Vl Unit. (R$)",
+    "markup_planilha": "MARKUP"
+  },
+  "lojas": {
+    "VERDEMAR": {
+      "tipo": "vip",
+      "endereco": "loja.verdemaratevoce.com.br",
+      "ativa": true
+    },
+    "VILLEFORTE": {
+      "tipo": "vip",
+      "endereco": "villefortentrega.com.br",
+      "ativa": true
+    },
+    "SUPERNOSSO": {
+      "tipo": "vtex",
+      "endereco": "https://www.supernosso.com",
+      "ativa": true
+    },
+    "LOJAS AMERICANAS": {
+      "tipo": "vtex",
+      "endereco": "https://www.americanas.com.br",
+      "ativa": true
+    },
+    "ATACADAO": {
+      "tipo": "vtex",
+      "endereco": "https://www.atacadao.com.br",
+      "ativa": true
+    },
+    "PAULO": {
+      "tipo": "estoque",
+      "endereco": "",
+      "ativa": true
+    },
+    "ARAUJO": {
+      "tipo": "araujo",
+      "endereco": "https://www.araujo.com.br",
+      "ativa": true
+    }
+  },
+  "estatisticas": {
+    "_comentario": "Lojas usadas em MENOR/MAIOR PREÇO e MÉDIA 3 MAIORES. Tire PAULO daqui se a referência de mercado não deve incluir a própria loja.",
+    "lojas": [
+      "VERDEMAR",
+      "SUPERNOSSO",
+      "LOJAS AMERICANAS",
+      "VILLEFORTE",
+      "PAULO",
+      "ATACADAO",
+      "ARAUJO"
+    ],
+    "minimo_precos_para_regra": 1,
+    "tolerancia_margem": 0.005
+  },
+  "busca": {
+    "min_score_passe1": 68,
+    "min_score_passe2": 52,
+    "lojas_em_paralelo": 6,
+    "pausa_entre_itens_seg": 0.08,
+    "timeout_seg": 30,
+    "tentativas": 3,
+    "falhas_seguidas_para_desistir": 8,
+    "cache_validade_horas": 24,
+    "pausa_araujo_seg": 1.2,
+    "araujo_usar_navegador": false,
+    "araujo_transporte": "auto"
+  },
+  "markup_alvo": {
+    "BEBIDAS_NAO_ALCOOLICAS": 0.9,
+    "CERVEJAS": 0.75,
+    "VINHOS": 0.96,
+    "MERCEARIA": 0.6,
+    "DOCES_IMPULSO": 1.3,
+    "BARRINHAS_NUTS": 1.3,
+    "SALGADINHOS": 1.0,
+    "LIMPEZA_BAZAR": 1.0,
+    "HIGIENE": 0.9,
+    "CONGELADOS": 0.9,
+    "RESFRIADOS": 0.9,
+    "HORTFRUTI": 1.0,
+    "SANDUICHES": 0.9,
+    "REFEICOES": 0.87
+  },
+  "categoria_estoque_para_markup": {
+    "MERCEARIA": "MERCEARIA",
+    "DOCES E GULOSEIMAS": "DOCES_IMPULSO",
+    "BEBIDAS": "BEBIDAS_NAO_ALCOOLICAS",
+    "BELEZA, HIGIENE E CUIDADOS": "HIGIENE",
+    "SALGADINHOS E APERITIVOS": "SALGADINHOS",
+    "LIMPEZA": "LIMPEZA_BAZAR",
+    "TEMPEROS, MOLHOS E ESPECIARIAS": "MERCEARIA",
+    "SORVETES": "CONGELADOS",
+    "UTILITÁRIOS, PET E JARDIM": "LIMPEZA_BAZAR",
+    "UTILITARIOS, PET E JARDIM": "LIMPEZA_BAZAR"
+  },
+  "atualizacao": {
+    "_comentario": "URL do version.json publicado por você. Vazio desativa a checagem.",
+    "url_version_json": "https://github.com/Sikansi/busca-precos/releases/latest/download/version.json",
+    "checar_na_abertura": true
+  }
+}

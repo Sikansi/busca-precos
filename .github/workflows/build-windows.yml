@@ -1,0 +1,71 @@
+# Gera o .exe no Windows. O PyInstaller não faz cross-compile, então não dá
+# para produzir isto do Linux — este workflow existe justamente para você não
+# precisar de uma máquina Windows só para empacotar.
+#
+# Disparo: crie uma tag (git tag v1.1.0 && git push --tags) ou rode à mão em
+# Actions → Build Windows → Run workflow.
+name: Build Windows
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Versão (X.Y.Z)"
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Rodar os testes antes de empacotar
+        run: python -m pytest tests/ -q
+
+      - name: Definir a versão
+        id: versao
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.versao }}" ]; then
+            echo "v=${{ inputs.versao }}" >> $GITHUB_OUTPUT
+          else
+            echo "v=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Empacotar
+        run: python build.py ${{ steps.versao.outputs.v }}
+
+      - name: Compactar a pasta do aplicativo
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/BuscaPrecos/* `
+            -DestinationPath dist/BuscaPrecos-${{ steps.versao.outputs.v }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BuscaPrecos-${{ steps.versao.outputs.v }}
+          path: |
+            dist/BuscaPrecos-${{ steps.versao.outputs.v }}.zip
+            dist/payload-${{ steps.versao.outputs.v }}.zip
+            dist/version.json
+
+      # Em tag, publica o Release já com o version.json que o app consulta.
+      - name: Publicar Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/BuscaPrecos-${{ steps.versao.outputs.v }}.zip
+            dist/payload-${{ steps.versao.outputs.v }}.zip
+            dist/version.json

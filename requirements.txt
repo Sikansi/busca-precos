@@ -1,0 +1,14 @@
+requests>=2.31
+rapidfuzz>=3.9
+openpyxl>=3.1
+
+# Transportes alternativos para o Araújo, quando o WAF recusa cliente Python.
+# São dependências binárias: precisam entrar no .exe (regerar o executável),
+# não chegam por atualização de payload. Rode o Diagnóstico para saber se
+# precisa — descomente só o que ele indicar.
+# curl_cffi>=0.7        # imita a impressão digital TLS do Chrome
+# playwright>=1.44      # navegador de verdade; usa o Edge do Windows
+
+# Só para desenvolver/empacotar; não vai para o cliente.
+# pytest>=8.0
+# pyinstaller>=6.6

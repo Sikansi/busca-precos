@@ -1,0 +1,24 @@
+# --- dados do cliente: NUNCA sobem ---------------------------------------
+# Notas fiscais com fornecedor, custo e quantidade; relatório de estoque;
+# planilhas de saída. Dado comercial de terceiro não vai para repo público.
+*.xlsx
+*.xlsm
+*.xltx
+*.csv
+!categorias.csv
+historico/
+diagnostico.txt
+cache_precos.sqlite
+config.json
+*.bak-*
+
+# --- gerados --------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+dist/
+build/
+*.spec.bak
+.build.json
