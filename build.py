@@ -41,10 +41,18 @@ PASTA_APP = DIST / "BuscaPrecos"
 # version.json apontando para o placeholder e a atualização quebra em silêncio.
 MEMORIA = RAIZ / ".build.json"
 
+# Vão para dentro do payload. A origem do seed é `config.padrao.json`, o
+# arquivo curado — **não** `config.json`, que é o config de trabalho desta
+# máquina e carrega os caminhos das minhas planilhas. Copiar o errado fazia o
+# cliente receber um seed apontando para arquivos que não existem nele; e como
+# `config.json` está no .gitignore, num clone limpo o payload sairia sem seed
+# nenhum e o programa quebraria na primeira abertura.
 ARQUIVOS_PAYLOAD = {
     "categorias.csv": "categorias.csv",
-    "config.json": "config.padrao.json",
+    "config.padrao.json": "config.padrao.json",
 }
+# Sem estes o payload é inútil: falhar alto é melhor que entregar quebrado.
+OBRIGATORIOS = ("categorias.csv", "config.padrao.json")
 
 
 def _base_url_lembrada() -> str | None:
@@ -82,9 +90,16 @@ def montar_payload(destino_pai: Path, versao: str) -> Path:
         destino / "buscaprecos",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
     )
+    faltando = [n for n in OBRIGATORIOS if not (RAIZ / n).is_file()]
+    if faltando:
+        raise SystemExit(
+            "não posso empacotar sem: " + ", ".join(faltando) + "\n"
+            "O payload precisa levar o seed de configuração e as categorias, "
+            "senão o programa não abre na máquina do cliente."
+        )
     for origem, nome_final in ARQUIVOS_PAYLOAD.items():
         caminho = RAIZ / origem
-        if caminho.exists():
+        if caminho.is_file():
             shutil.copy2(caminho, destino / nome_final)
 
     (pasta_payload / "ATUAL").write_text(versao, encoding="utf-8")

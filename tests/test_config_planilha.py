@@ -232,3 +232,40 @@ def test_caminho_vazio_nao_vira_a_pasta_do_programa(tmp_path):
     cfg = carregar_config(tmp_path)
     assert not cfg.caminho("planilha").is_file()
     assert not cfg.caminho("estoque").is_file()
+
+
+def test_build_leva_o_seed_curado_e_nao_o_config_de_trabalho():
+    """O que o `build.py` empacota é o que chega ao cliente.
+
+    Ele copiava `config.json` — o config de trabalho desta máquina, com os
+    caminhos das minhas planilhas — em vez de `config.padrao.json`. O teste
+    anterior conferia o arquivo curado na raiz, que o build nem usava: validei
+    o artefato errado. Este confere a origem declarada.
+    """
+    import ast
+
+    fonte = (RAIZ / "build.py").read_text(encoding="utf-8")
+    arvore = ast.parse(fonte)
+    mapa = None
+    for no in ast.walk(arvore):
+        if isinstance(no, ast.Assign) and any(
+            getattr(alvo, "id", "") == "ARQUIVOS_PAYLOAD" for alvo in no.targets
+        ):
+            mapa = ast.literal_eval(no.value)
+    assert mapa is not None, "não achei ARQUIVOS_PAYLOAD em build.py"
+    assert "config.json" not in mapa, (
+        "config.json é o config de trabalho e está no .gitignore: "
+        "num clone limpo o payload sairia sem seed"
+    )
+    assert mapa.get("config.padrao.json") == "config.padrao.json"
+
+
+def test_seed_curado_esta_versionado():
+    """Se o seed estiver no .gitignore, um clone limpo gera app quebrado."""
+    import subprocess
+
+    r = subprocess.run(
+        ["git", "check-ignore", "config.padrao.json"],
+        cwd=RAIZ, capture_output=True, text=True,
+    )
+    assert r.returncode != 0, "config.padrao.json não pode estar ignorado pelo git"
