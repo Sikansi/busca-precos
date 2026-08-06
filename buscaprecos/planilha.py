@@ -495,3 +495,86 @@ def cabecalhos_de(caminho: Path | str) -> list[str]:
             if sum(1 for c in linha if str(c).strip()) >= 3:
                 return [str(c).strip() for c in linha if str(c).strip()]
     return []
+
+
+# --------------------------------------------------------------------------- #
+# Erros de acesso a arquivo
+# --------------------------------------------------------------------------- #
+
+# Atributos de arquivo do Windows que denunciam arquivo só na nuvem. O
+# OneDrive com "Arquivos sob Demanda" deixa um marcador no lugar do conteúdo;
+# ler dispara o download, e se ele falhar o Python recebe PermissionError, que
+# parece problema de permissão e não é.
+_ATRIBUTO_OFFLINE = 0x1000
+_ATRIBUTO_RECALL_ABERTURA = 0x00040000
+_ATRIBUTO_RECALL_LEITURA = 0x00400000
+
+# Pastas que a Proteção contra Ransomware do Defender cobre por padrão. Um
+# executável sem assinatura acessando estas pastas é exatamente o caso que ela
+# bloqueia — e o sintoma é "acesso negado".
+_PASTAS_PROTEGIDAS = ("documents", "documentos", "desktop", "área de trabalho",
+                      "area de trabalho", "pictures", "imagens", "onedrive")
+
+
+def arquivo_de_trava(caminho: Path) -> Path | None:
+    """O `~$nome.xlsx` que o Excel cria enquanto o arquivo está aberto."""
+    trava = caminho.with_name(f"~${caminho.name}")
+    return trava if trava.exists() else None
+
+
+def esta_somente_na_nuvem(caminho: Path) -> bool:
+    """True se o Windows marcar o arquivo como não baixado."""
+    try:
+        atributos = caminho.stat().st_file_attributes  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False  # fora do Windows não existe esse conceito
+    return bool(
+        atributos & (_ATRIBUTO_OFFLINE | _ATRIBUTO_RECALL_ABERTURA
+                     | _ATRIBUTO_RECALL_LEITURA)
+    )
+
+
+def explicar_erro_de_arquivo(caminho: Path, exc: BaseException) -> str:
+    """Traduz o erro em algo que o cliente possa resolver.
+
+    "[Errno 13] Permission denied" não diz nada a quem não é programador, e as
+    três causas prováveis têm soluções completamente diferentes. Adivinhar a
+    causa errada custa uma rodada de suporte, então vale investigar os sinais
+    em vez de chutar.
+    """
+    caminho = Path(caminho)
+    if not isinstance(exc, PermissionError):
+        return f"não consegui ler {caminho.name}: {type(exc).__name__}: {exc}"
+
+    motivos: list[str] = []
+    if arquivo_de_trava(caminho) is not None:
+        motivos.append(
+            "o arquivo está ABERTO no Excel (achei o arquivo de trava "
+            f"~${caminho.name}). Feche a planilha no Excel e tente de novo."
+        )
+    if esta_somente_na_nuvem(caminho):
+        motivos.append(
+            "o arquivo está apenas na nuvem, não baixado. No Explorador, "
+            "clique com o botão direito nele e escolha "
+            '"Sempre manter neste dispositivo".'
+        )
+    if any(p in str(caminho).lower() for p in _PASTAS_PROTEGIDAS):
+        motivos.append(
+            "a pasta pode estar protegida pela Proteção contra Ransomware do "
+            "Windows (Segurança do Windows → Proteção contra vírus → Proteção "
+            "contra ransomware → Acesso controlado a pastas). Libere o "
+            "BuscaPrecos.exe ali, ou mova a planilha para uma pasta simples "
+            "como C:\\BuscaPrecos."
+        )
+
+    if not motivos:
+        motivos.append(
+            "verifique se a planilha não está aberta em outro programa e se "
+            "você tem permissão na pasta."
+        )
+
+    cabeca = f"Não consegui abrir {caminho.name} — o Windows negou o acesso."
+    if len(motivos) == 1:
+        return f"{cabeca} Provável causa: {motivos[0]}"
+    corpo = "\n".join(f"  {i}. {m}" for i, m in enumerate(motivos, start=1))
+    return f"{cabeca} Causas possíveis, da mais provável para a menos:\n{corpo}"

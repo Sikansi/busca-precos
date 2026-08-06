@@ -133,7 +133,29 @@ atual.
 
 ---
 
-## 6. Quando algo der errado
+## 6. "O Windows negou o acesso" à planilha
+
+Se aparecer isso ao escolher a planilha, o programa já diz a causa provável.
+As três são:
+
+1. **A planilha está aberta no Excel.** É o caso mais comum. Feche e tente de
+   novo — o programa detecta isso e avisa com esse texto.
+2. **O arquivo está só na nuvem.** Se ela fica no OneDrive e você usa
+   "Arquivos sob Demanda", o arquivo pode ser só um atalho. No Explorador,
+   clique com o botão direito nele → **Sempre manter neste dispositivo**.
+3. **A pasta está protegida pelo Windows.** A Proteção contra Ransomware
+   bloqueia programas não reconhecidos de acessar Documentos, Desktop e
+   OneDrive. Em *Segurança do Windows → Proteção contra vírus e ameaças →
+   Proteção contra ransomware → Acesso controlado a pastas*, libere o
+   `BuscaPrecos.exe`.
+
+**Atalho que resolve os três de uma vez:** guarde as planilhas numa pasta
+simples, fora do OneDrive — por exemplo `C:\BuscaPrecos`. É também onde
+recomendo deixar o próprio programa.
+
+---
+
+## 7. Quando algo der errado
 
 Os sites dos supermercados mudam sem avisar, e quando mudam o programa para de
 achar preço naquela loja. Sinais:

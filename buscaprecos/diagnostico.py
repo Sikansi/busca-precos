@@ -76,7 +76,13 @@ def arquivos(raiz: Path, raiz_payload: Path | None) -> None:
     secao("ARQUIVOS E CODIFICAÇÃO")
     try:
         from buscaprecos.config import carregar_config
-        from buscaprecos.planilha import cabecalhos_de, codificacao_de, detectar_colunas
+        from buscaprecos.planilha import (
+            arquivo_de_trava,
+            cabecalhos_de,
+            codificacao_de,
+            detectar_colunas,
+            esta_somente_na_nuvem,
+        )
 
         cfg = carregar_config(raiz, raiz_payload)
     except Exception as exc:
@@ -95,10 +101,21 @@ def arquivos(raiz: Path, raiz_payload: Path | None) -> None:
             diga(f"{chave:14} : não definido ou faltando — {nome}")
             continue
         tamanho = caminho.stat().st_size // 1024
-        extra = ""
+        detalhes = [f"{tamanho} KB"]
         if caminho.suffix.lower() in {".csv", ".txt"}:
-            extra = f", codificação {codificacao_de(caminho)}"
-        diga(f"{chave:14} : {caminho.name} ({tamanho} KB{extra})")
+            detalhes.append(f"codificação {codificacao_de(caminho)}")
+        # Sinais que explicam "acesso negado" sem precisar de tentativa e erro.
+        if arquivo_de_trava(caminho) is not None:
+            detalhes.append("ABERTO NO EXCEL (existe ~$ do arquivo)")
+        if esta_somente_na_nuvem(caminho):
+            detalhes.append("SÓ NA NUVEM, não baixado")
+        try:
+            with caminho.open("rb") as f:
+                f.read(1)
+            detalhes.append("leitura OK")
+        except OSError as exc:
+            detalhes.append(f"LEITURA NEGADA ({type(exc).__name__})")
+        diga(f"{chave:14} : {caminho.name} ({', '.join(detalhes)})")
 
     try:
         caminho = cfg.caminho("planilha")

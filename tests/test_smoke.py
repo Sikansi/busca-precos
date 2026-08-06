@@ -37,7 +37,8 @@ ENTRADAS = {
     "lojas": ["ClienteVip", "ClienteVtex", "ClienteAraujo", "ClienteEstoque",
               "Achado"],
     "planilha": ["Planilha", "detectar_colunas", "cabecalhos_de", "abrir_texto",
-                 "codificacao_de"],
+                 "codificacao_de", "explicar_erro_de_arquivo", "arquivo_de_trava",
+                 "esta_somente_na_nuvem"],
     "precos": ["format_price", "parse_price_br", "parse_markup", "clean_ean",
                "is_valid_ean", "fmt_pct"],
     "rede": ["nova_sessao", "Disjuntor", "LimiteDeTaxa", "sessao_tls_navegador",
@@ -57,11 +58,21 @@ def test_modulo_importa(nome):
 
 @pytest.mark.parametrize("nome", MODULOS)
 def test_modulo_nao_esta_truncado(nome):
-    """Compila como Python válido e termina em construção completa."""
+    """Compila como Python válido e a última definição está completa.
+
+    A primeira versão daqui checava com que caractere o arquivo termina, o que
+    é heurística: acusou um módulo íntegro que acabava em f-string. `ast.parse`
+    já rejeita arquivo cortado no meio de qualquer construção — é a garantia de
+    verdade. O resto confirma que sobrou conteúdo executável.
+    """
     fonte = (PACOTE / f"{nome}.py").read_text(encoding="utf-8")
-    ast.parse(fonte)  # levanta SyntaxError se cortado no meio
-    assert fonte.rstrip().endswith((")", ":", '"""', "]", "}", "None", "True",
-                                    "False", "pass")) or fonte.rstrip()[-1].isalnum()
+    arvore = ast.parse(fonte)  # SyntaxError se cortado no meio
+    definicoes = [
+        n for n in arvore.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+                          ast.Assign, ast.AnnAssign))
+    ]
+    assert definicoes, f"buscaprecos.{nome} não tem nada além de imports"
 
 
 @pytest.mark.parametrize("modulo,nomes", sorted(ENTRADAS.items()))

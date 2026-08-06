@@ -325,7 +325,12 @@ class Janela:
         try:
             cabecalhos = cabecalhos_de(caminho)
         except Exception as exc:
-            messagebox.showerror("Não consegui ler", f"{type(exc).__name__}: {exc}")
+            from .planilha import explicar_erro_de_arquivo
+
+            messagebox.showerror(
+                "Não consegui abrir a planilha",
+                explicar_erro_de_arquivo(caminho, exc),
+            )
             return
         dialogo = DialogoColunas(self.root, cabecalhos, self.cfg.colunas)
         if dialogo.resultado:
@@ -337,12 +342,22 @@ class Janela:
 
     def _conferir_colunas(self, caminho: Path) -> bool:
         """Valida a planilha escolhida. Abre o mapeamento se faltar o essencial."""
-        from .planilha import CONSEQUENCIA_SE_FALTAR, cabecalhos_de, detectar_colunas
+        from .planilha import (
+            CONSEQUENCIA_SE_FALTAR,
+            cabecalhos_de,
+            detectar_colunas,
+            explicar_erro_de_arquivo,
+        )
 
         try:
             cabecalhos = cabecalhos_de(caminho)
         except Exception as exc:
-            self._log(f"Não consegui ler os cabeçalhos: {exc}", "erro")
+            # "[Errno 13] Permission denied" não diz nada a quem não programa,
+            # e as causas prováveis têm soluções diferentes. Explica e mostra
+            # na tela: só no log o cliente não vê e me liga.
+            recado = explicar_erro_de_arquivo(caminho, exc)
+            self._log(recado, "erro")
+            messagebox.showerror("Não consegui abrir a planilha", recado)
             return False
         mapa, faltando = detectar_colunas(cabecalhos, self.cfg.colunas)
 
@@ -535,9 +550,18 @@ class Janela:
         planilha: Planilha | None = None
         try:
             self.fila.put(MsgLog(f"Lendo {caminho.name}…"))
-            planilha = Planilha.carregar(
-                caminho, coluna_chave=self.cfg.colunas["descricao"]
-            )
+            try:
+                planilha = Planilha.carregar(
+                    caminho, coluna_chave=self.cfg.colunas["descricao"]
+                )
+            except OSError as exc:
+                from .planilha import explicar_erro_de_arquivo
+
+                self.fila.put(MsgFim(
+                    saida=None, resumo="", avisos=[],
+                    erro=explicar_erro_de_arquivo(caminho, exc),
+                ))
+                return
             planilha.limpar_erros_excel(self.cfg.colunas["custo"])
             planilha.garantir_colunas(
                 self.cfg.colunas_de_preco(),
@@ -596,10 +620,16 @@ class Janela:
                         MsgLog(f"{estoque.nome}: {n} preços do estoque próprio.")
                     )
                 except Exception as exc:
+                    from .planilha import explicar_erro_de_arquivo
+
+                    detalhe = (
+                        explicar_erro_de_arquivo(self.cfg.caminho("estoque"), exc)
+                        if isinstance(exc, OSError)
+                        else f"{type(exc).__name__}: {exc}"
+                    )
                     self.fila.put(MsgLog(
-                        f"Não consegui ler a planilha de estoque, então a coluna "
-                        f"{estoque.nome} ficou vazia — o resto foi salvo normalmente. "
-                        f"({type(exc).__name__}: {exc})",
+                        f"A coluna {estoque.nome} ficou vazia — o resto foi salvo "
+                        f"normalmente. {detalhe}",
                         "aviso",
                     ))
 
@@ -699,6 +729,12 @@ class Janela:
                 self.bt_abrir.configure(state="normal")
                 self.bt_pasta.configure(state="normal")
                 self._log(f"Mesmo assim salvei o que havia em: {msg.saida.name}", "ok")
+            elif "negou o acesso" in msg.erro:
+                self._log(
+                    "Dica: mover a planilha para uma pasta simples como "
+                    "C:\\BuscaPrecos resolve os três casos de uma vez.",
+                    "aviso",
+                )
             messagebox.showerror(
                 "Deu erro",
                 "A busca não terminou."
