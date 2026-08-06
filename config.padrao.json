@@ -55,16 +55,6 @@
       "tipo": "vtex",
       "endereco": "https://www.carrefour.com.br",
       "ativa": true
-    },
-    "MART MINAS": {
-      "tipo": "manual",
-      "endereco": "https://www.martminas.com.br",
-      "ativa": true
-    },
-    "EPA": {
-      "tipo": "manual",
-      "endereco": "https://epa.com.br",
-      "ativa": true
     }
   },
   "estatisticas": {
@@ -77,9 +67,7 @@
       "PAULO",
       "ATACADAO",
       "ARAUJO",
-      "CARREFOUR",
-      "MART MINAS",
-      "EPA"
+      "CARREFOUR"
     ],
     "minimo_precos_para_regra": 1,
     "tolerancia_margem": 0.005
@@ -129,5 +117,9 @@
     "_comentario": "URL do version.json publicado por você. Vazio desativa a checagem.",
     "url_version_json": "https://github.com/Sikansi/busca-precos/releases/latest/download/version.json",
     "checar_na_abertura": true
-  }
+  },
+  "lojas_retiradas": [
+    "MART MINAS",
+    "EPA"
+  ]
 }

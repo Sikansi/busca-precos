@@ -80,8 +80,11 @@ historico/              planilhas, logs e os scripts da v1 (referência)
 | CARREFOUR | VTEX Intelligent Search | sim (`query=<ean>`) |
 | ARAUJO | Salesforce Commerce (HTML) | sim (EAN sai da URL da imagem) |
 | PAULO | `Relatorio_planograma…` | EAN → código → ID → nome |
-| MART MINAS | — | **manual**: não publica preço na web |
-| EPA | — | **manual**: não publica preço na web |
+
+**Loja listada é loja preenchida.** Não existe tipo "coluna que o cliente
+digita": criar coluna na planilha ele faz sozinho, e ver o supermercado na
+lista faz esperar que o preço venha. Mart Minas e Epa chegaram a entrar assim
+na v1.1.1 e foram retiradas na v1.2.0.
 
 ### As duas gerações de VTEX
 
@@ -98,15 +101,14 @@ inteiro (`recordsFiltered` de 21 milhões) — parece resultado válido e não �
 
 ### Lojas sem preço na web
 
-Mart Minas e Epa foram investigados: o site é institucional (WordPress e
-páginas regionais), não há API de produto em nenhum subdomínio, não são
-VipCommerce, e as ofertas saem em **encarte PDF/imagem e app**. Ficam
-cadastradas como `manual` — a coluna existe na planilha para digitar, e o
-rótulo na tela diz "(preencher à mão)" para ninguém esperar que o programa
-preencha.
+Mart Minas e Epa foram investigados e **não entram no cadastro**: o site é
+institucional (WordPress e páginas regionais), não há API de produto em nenhum
+subdomínio, não são VipCommerce, e as ofertas saem em **encarte PDF/imagem e
+app**.
 
 Automatizá-las exigiria OCR de encarte (só pega item de promoção) ou engenharia
-reversa do app. Nenhum dos dois se paga.
+reversa do app. Nenhum dos dois se paga — e listá-las sem buscar é pior que não
+listar.
 
 ## Como o casamento funciona
 
@@ -189,9 +191,17 @@ O cliente pode incluir lojas **VipCommerce** e **VTEX** pela tela
 plataforma nova (site próprio, Shopify, Magento) precisa de um cliente novo em
 `lojas.py` — isso é atualização.
 
-O botão **Testar** faz uma consulta real antes de salvar, porque endereço
-errado não dá erro: a coluna fica sempre vazia e parece que a loja não tem os
-produtos.
+**O cadastro testa antes de aceitar.** Endereço ou plataforma errados não dão
+erro: a coluna simplesmente fica vazia. Antes disso só se descobria depois de
+esperar a busca inteira — meia hora para saber que o cadastro estava errado.
+Agora a consulta é feita na hora e a loja só entra se responder; se falhar, o
+programa explica e pergunta se deve cadastrar mesmo assim.
+
+Durante a busca há uma segunda rede: uma loja que não achou nada nas primeiras
+20 consultas é denunciada na hora ("confira o endereço e a plataforma"), e o
+resumo final nomeia toda loja que terminou sem nenhum preço. Serve também para
+o caso silencioso, em que o site responde 200 e nunca casa nada — aí o
+disjuntor não abre e a coluna chegaria vazia sem explicação.
 
 ## Configuração
 

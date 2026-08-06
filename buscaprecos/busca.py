@@ -26,6 +26,10 @@ from .rede import Disjuntor, LimiteDeTaxa, nova_sessao
 from .texto import multiplicador_de_pacote
 
 
+# Quantas consultas sem nenhum acerto bastam para desconfiar do cadastro.
+LIMITE_AVISO_LOJA_VAZIA = 20
+
+
 @dataclass
 class Progresso:
     loja: str
@@ -44,7 +48,17 @@ class Resultado:
     erros: int = 0
     esperas_por_limite: int = 0
     lojas_desligadas: dict[str, str] = field(default_factory=dict)
+    preenchidos_por_loja: dict[str, int] = field(default_factory=dict)
     cancelado: bool = False
+
+    def lojas_vazias(self) -> list[str]:
+        """Lojas que foram consultadas e não preencheram nada.
+
+        Quase sempre é cadastro errado (endereço ou plataforma) ou o site
+        mudou. Sem isso o cliente só descobre olhando a coluna vazia na
+        planilha depois de meia hora de busca.
+        """
+        return sorted(loja for loja, n in self.preenchidos_por_loja.items() if n == 0)
 
     def resumo(self) -> str:
         partes = [
@@ -63,6 +77,9 @@ class Resultado:
             partes.append(
                 "lojas desligadas: " + ", ".join(sorted(self.lojas_desligadas))
             )
+        vazias = self.lojas_vazias()
+        if vazias:
+            partes.append("sem nenhum preço: " + ", ".join(vazias))
         if self.cancelado:
             partes.append("INTERROMPIDO pelo usuário")
         return "; ".join(partes)
@@ -76,12 +93,14 @@ class Buscador:
         cache: CachePrecos | None = None,
         log: dict[str, Any] | None = None,
         ao_progredir: Callable[[Progresso], None] | None = None,
+        ao_avisar: Callable[[str, str], None] | None = None,
         cancelar: threading.Event | None = None,
     ):
         self.cfg = cfg
         self.cache = cache
         self.log = log if log is not None else {"cep": cfg.cep, "produtos": {}}
         self.ao_progredir = ao_progredir
+        self.ao_avisar = ao_avisar
         self.cancelar = cancelar or threading.Event()
         self.sessao = nova_sessao(int(cfg.busca.get("tentativas", 3)))
         self.disjuntor = Disjuntor(int(cfg.busca.get("falhas_seguidas_para_desistir", 8)))
@@ -112,6 +131,13 @@ class Buscador:
                 self._fechaveis.append(cliente)
             return cliente
         raise ValueError(f"tipo de loja sem cliente de rede: {loja.tipo}")
+
+    def _avisar(self, texto: str, nivel: str = "aviso") -> None:
+        if self.ao_avisar is not None:
+            try:
+                self.ao_avisar(texto, nivel)
+            except Exception:
+                pass
 
     def _registrar(self, rotulo: str, loja: str, dados: dict[str, Any]) -> None:
         with self._lock:
@@ -175,6 +201,8 @@ class Buscador:
         total = len(linhas)
         feitas = 0
         preenchidos_loja = 0
+        consultadas = 0        # itens que realmente foram perguntados à loja
+        ja_avisou_vazia = False
 
         for linha in linhas:
             if self.cancelar.is_set():
@@ -194,6 +222,22 @@ class Buscador:
 
             rotulo = descricao or ean
             chave = chave_produto(ean, descricao)
+            consultadas += 1
+
+            # Aviso precoce: loja que não preencheu nada nas primeiras consultas
+            # quase certamente está com cadastro errado. Falar em ~1 minuto é
+            # melhor que o cliente descobrir no fim de meia hora.
+            if (
+                not ja_avisou_vazia
+                and consultadas >= LIMITE_AVISO_LOJA_VAZIA
+                and preenchidos_loja == 0
+            ):
+                ja_avisou_vazia = True
+                self._avisar(
+                    f"{loja.nome} não achou nenhum preço nos primeiros "
+                    f"{consultadas} produtos. Confira o endereço e a plataforma "
+                    "em 'Cadastrar lojas…' — a busca continua nas outras."
+                )
 
             # 1) cache
             if self.cache is not None:
@@ -303,6 +347,13 @@ class Buscador:
                 self.ao_progredir(Progresso(loja.nome, feitas, total, preenchidos_loja))
             time.sleep(pausa)
 
+        with self._lock:
+            self._resultado.preenchidos_por_loja[loja.nome] = preenchidos_loja
+        if consultadas and preenchidos_loja == 0:
+            self._avisar(
+                f"{loja.nome} terminou sem nenhum preço em {consultadas} "
+                "consultas. Isso costuma ser cadastro errado ou mudança no site."
+            )
         if self.ao_progredir:
             self.ao_progredir(Progresso(loja.nome, total, total, preenchidos_loja))
 

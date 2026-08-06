@@ -100,7 +100,11 @@ def main() -> int:
 
     signal.signal(signal.SIGINT, _interromper)
 
-    buscador = Buscador(cfg, cache=cache, log=log, ao_progredir=_barra, cancelar=cancelar)
+    buscador = Buscador(
+        cfg, cache=cache, log=log, ao_progredir=_barra,
+        ao_avisar=lambda texto, nivel: print(f"  AVISO: {texto}", flush=True),
+        cancelar=cancelar,
+    )
     categorias = buscador.categorias_estoque()
 
     if not args.somente_calculo:

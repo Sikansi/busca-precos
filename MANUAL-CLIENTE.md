@@ -98,14 +98,21 @@ Em **Cadastrar lojas…** você pode incluir supermercados novos. Precisa de:
 - **Plataforma** — `vtex` ou `vip`
 - **Endereço** — a URL do site (VTEX) ou o domínio da loja (VipCommerce)
 
-> **Depois de incluir, clique em Testar.** Se o endereço ou a plataforma
-> estiverem errados, a loja não dá erro: ela simplesmente fica **sempre
-> vazia**, e parece que os produtos não existem lá. O teste faz uma consulta
-> real e mostra o que voltou.
+Ao clicar em **Incluir**, o programa faz uma consulta de teste na hora e só
+cadastra se a loja responder. Se não responder, ele explica o motivo e pergunta
+se você quer cadastrar mesmo assim.
 
-Descobrir a plataforma de um site dá trabalho. Se o teste falhar, me chame —
-pode ser uma plataforma que o programa ainda não sabe ler, e isso eu preciso
-acrescentar por atualização.
+Isso existe porque endereço ou plataforma errados **não dão erro**: a coluna
+simplesmente fica vazia, e parece que o supermercado não tem os produtos.
+
+Se o teste falhar, me chame — pode ser uma plataforma que o programa ainda não
+sabe ler, e isso eu acrescento por atualização.
+
+> Toda loja da lista é preenchida pelo programa. Se algum supermercado que
+> você quer não aparece e não passa no teste, é porque ele não publica preço
+> na internet (alguns só divulgam encarte em PDF ou no aplicativo). Nesse caso
+> vale criar a coluna direto na sua planilha e preencher à mão — o programa
+> não mexe nas colunas que não são dele.
 
 Suas alterações ficam salvas e valem nas próximas aberturas.
 
@@ -131,7 +138,9 @@ atual.
 Os sites dos supermercados mudam sem avisar, e quando mudam o programa para de
 achar preço naquela loja. Sinais:
 
-- Uma loja que sempre respondia ficou **inteira vazia**
+- Aparece **"não achou nenhum preço nos primeiros 20 produtos"** logo no
+  começo da busca
+- No fim, o resumo diz **"sem nenhum preço: NOME DA LOJA"**
 - Aparece **"ficou fora do ar"** na área de Detalhes
 - Preços claramente errados numa loja específica
 

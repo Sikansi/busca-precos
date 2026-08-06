@@ -190,25 +190,42 @@ def test_carrefour_vem_cadastrado_e_e_buscado():
 
 
 @pytest.mark.parametrize("loja", ["MART MINAS", "EPA"])
-def test_mart_minas_e_epa_vem_como_manual(loja):
-    """Não publicam preço na web: site institucional, ofertas em encarte e app.
+def test_loja_sem_preco_na_web_nao_e_cadastrada(loja):
+    """Loja listada no programa é promessa de busca.
 
-    Cadastradas como `manual` para a coluna existir na planilha, mas fora da
-    busca automática — prometer que o programa preenche seria mentira.
+    Elas entraram na v1.1.1 como coluna para o cliente digitar, o que não
+    entrega nada: criar coluna na planilha ele faz sozinho, e ver a loja na
+    lista faz esperar que o preço venha preenchido. Foram retiradas.
     """
     cfg = carregar_config(RAIZ)
-    assert loja in cfg.lojas
-    assert cfg.lojas[loja].tipo == "manual"
-    assert not cfg.lojas[loja].consulta_rede
-    assert loja in cfg.colunas_de_preco(), "a coluna tem que existir para digitar"
+    assert loja not in cfg.lojas
+    assert loja not in cfg.colunas_de_preco()
 
 
-def test_seed_do_payload_tem_as_tres():
-    """O cliente recebe as três já cadastradas, sem mexer na tela."""
+def test_toda_loja_cadastrada_e_preenchida_pelo_programa():
+    """O invariante do cadastro: nada aparece na lista sem ser preenchido."""
+    cfg = carregar_config(RAIZ)
+    for lj in cfg.lojas.values():
+        assert lj.consulta_rede or lj.tipo == "estoque", (
+            f"{lj.nome} é tipo {lj.tipo}: aparece na lista mas ninguém preenche"
+        )
+
+
+def test_manual_nao_e_oferecido_no_cadastro():
+    from buscaprecos.config import TIPOS_LOJA
+
+    assert "manual" not in TIPOS_LOJA
+
+
+def test_seed_traz_o_carrefour_e_manda_retirar_as_manuais():
     padrao = json.loads((RAIZ / "config.padrao.json").read_text(encoding="utf-8"))
-    for loja in ("CARREFOUR", "MART MINAS", "EPA"):
-        assert loja in padrao["lojas"], f"{loja} fora do seed"
-        assert loja in padrao["estatisticas"]["lojas"]
+    assert "CARREFOUR" in padrao["lojas"]
+    assert "CARREFOUR" in padrao["estatisticas"]["lojas"]
+    for loja in ("MART MINAS", "EPA"):
+        assert loja not in padrao["lojas"]
+        assert loja in padrao["lojas_retiradas"], (
+            "quem recebeu a v1.1.1 precisa que a atualização desfaça o cadastro"
+        )
 
 
 def test_paralelismo_cobre_as_lojas_de_rede():
@@ -359,3 +376,170 @@ def test_sem_payload_nao_mexe_em_nada(tmp_path):
     shutil.copy2(RAIZ / "categorias.csv", tmp_path / "categorias.csv")
     cfg = carregar_config(tmp_path)
     assert cfg.avisos_de_migracao == []
+
+
+def test_atualizacao_desfaz_a_loja_manual_que_ela_mesma_criou(tmp_path):
+    """A v1.1.1 cadastrou MART MINAS e EPA como coluna para digitar.
+
+    A regra geral é "atualização nunca remove", que protege dado do cliente.
+    Mas estas duas foram criadas pela própria atualização, então desfazê-las é
+    consertar, não apagar trabalho dele.
+    """
+    def com_manuais(c):
+        for loja in ("MART MINAS", "EPA"):
+            c["lojas"][loja] = {"tipo": "manual", "endereco": "", "ativa": True}
+            c["estatisticas"]["lojas"].append(loja)
+
+    payload = _instalacao(tmp_path, com_manuais)
+    cfg = carregar_config(tmp_path, payload)
+    assert "MART MINAS" not in cfg.lojas
+    assert "EPA" not in cfg.lojas
+    assert "MART MINAS" not in cfg.colunas_estatistica()
+    assert any("removida" in m for m in cfg.avisos_de_migracao)
+
+
+def test_nao_remove_se_o_cliente_transformou_em_loja_de_verdade(tmp_path):
+    """Se ele descobriu um endereço que funciona, o cadastro é dele."""
+    def cliente_achou_a_loja(c):
+        c["lojas"]["MART MINAS"] = {
+            "tipo": "vtex", "endereco": "https://loja.martminas.com.br",
+            "ativa": True,
+        }
+    payload = _instalacao(tmp_path, cliente_achou_a_loja)
+    cfg = carregar_config(tmp_path, payload)
+    assert "MART MINAS" in cfg.lojas
+    assert cfg.lojas["MART MINAS"].tipo == "vtex"
+
+
+def test_dialogo_de_lojas_testa_antes_de_cadastrar():
+    """Cadastrar loja errada não dá erro: a coluna fica vazia.
+
+    Antes só se descobria depois de esperar a busca inteira — meia hora para
+    saber que o endereço estava errado.
+    """
+    fonte = (RAIZ / "buscaprecos" / "gui.py").read_text(encoding="utf-8")
+    inicio = fonte.index("def _incluir(self) -> None:")
+    corpo = fonte[inicio:fonte.index("def _decidir_inclusao", inicio)]
+    assert "_testar_loja" in corpo, "o cadastro tem que consultar a loja"
+    assert "adicionar_loja" not in corpo, (
+        "não pode cadastrar antes de saber se a loja responde"
+    )
+
+
+def test_inclusao_so_cadastra_depois_do_resultado():
+    fonte = (RAIZ / "buscaprecos" / "gui.py").read_text(encoding="utf-8")
+    assert "def _decidir_inclusao" in fonte
+    inicio = fonte.index("def _decidir_inclusao")
+    corpo = fonte[inicio:inicio + 1400]
+    assert "_cadastrar" in corpo
+    assert "askyesno" in corpo, "loja que falhou o teste exige confirmação"
+
+
+# --------------------------------------------------------------------------- #
+# Aviso de loja que não preenche
+# --------------------------------------------------------------------------- #
+
+def _config_com_uma_loja(tmp_path, tipo="vtex"):
+    import shutil
+
+    shutil.copy2(RAIZ / "config.padrao.json", tmp_path / "config.padrao.json")
+    shutil.copy2(RAIZ / "categorias.csv", tmp_path / "categorias.csv")
+    cfg = carregar_config(tmp_path)
+    for nome in list(cfg.lojas):
+        if nome != "SUPERNOSSO":
+            cfg.lojas.pop(nome)
+    cfg.lojas["SUPERNOSSO"].tipo = tipo
+    cfg.busca["pausa_entre_itens_seg"] = 0
+    return cfg
+
+
+class ClienteQueNuncaAcha:
+    """Responde sem erro e nunca encontra — o caso silencioso.
+
+    Pior que erro: o disjuntor não abre, a busca vai até o fim, e a coluna
+    chega vazia na planilha sem nenhuma explicação.
+    """
+
+    def __init__(self, *a, **k):
+        self.consultas = 0
+
+    def buscar(self, ean, descricao, *, min_score, relaxed):
+        self.consultas += 1
+        return None
+
+
+def test_avisa_no_meio_da_busca_quando_a_loja_nao_acha_nada(tmp_path, monkeypatch):
+    """Sem isso o cliente só descobre olhando a planilha no fim de meia hora."""
+    from buscaprecos import busca as mod
+
+    cfg = _config_com_uma_loja(tmp_path)
+    monkeypatch.setattr(
+        mod.Buscador, "_criar_cliente", lambda self, loja: ClienteQueNuncaAcha()
+    )
+    linhas = [
+        {cfg.colunas["descricao"]: f"PRODUTO {i}",
+         cfg.colunas["ean"]: "7894900010015"}
+        for i in range(60)
+    ]
+    avisos: list[str] = []
+    buscador = mod.Buscador(cfg, ao_avisar=lambda t, n: avisos.append(t))
+    buscador.executar(linhas)
+
+    precoces = [a for a in avisos if "primeiros" in a]
+    assert precoces, "tem que avisar no meio, não só no fim"
+    assert "SUPERNOSSO" in precoces[0]
+    assert str(mod.LIMITE_AVISO_LOJA_VAZIA) in precoces[0]
+
+
+def test_avisa_uma_vez_so(tmp_path, monkeypatch):
+    """Repetir o aviso a cada produto viraria ruído e esconderia o resto."""
+    from buscaprecos import busca as mod
+
+    cfg = _config_com_uma_loja(tmp_path)
+    monkeypatch.setattr(
+        mod.Buscador, "_criar_cliente", lambda self, loja: ClienteQueNuncaAcha()
+    )
+    linhas = [
+        {cfg.colunas["descricao"]: f"PRODUTO {i}",
+         cfg.colunas["ean"]: "7894900010015"}
+        for i in range(80)
+    ]
+    avisos: list[str] = []
+    mod.Buscador(cfg, ao_avisar=lambda t, n: avisos.append(t)).executar(linhas)
+    assert len([a for a in avisos if "primeiros" in a]) == 1
+
+
+def test_loja_que_acha_nao_gera_aviso(tmp_path, monkeypatch):
+    from buscaprecos import busca as mod
+    from buscaprecos.lojas import Achado
+
+    class ClienteQueAcha(ClienteQueNuncaAcha):
+        def buscar(self, ean, descricao, *, min_score, relaxed):
+            return Achado("Produto Achado", 9.99, 200.0, "SUPERNOSSO", "ean")
+
+    cfg = _config_com_uma_loja(tmp_path)
+    monkeypatch.setattr(
+        mod.Buscador, "_criar_cliente", lambda self, loja: ClienteQueAcha()
+    )
+    linhas = [
+        {cfg.colunas["descricao"]: f"PRODUTO {i}",
+         cfg.colunas["ean"]: "7894900010015"}
+        for i in range(30)
+    ]
+    avisos: list[str] = []
+    resultado = mod.Buscador(cfg, ao_avisar=lambda t, n: avisos.append(t)).executar(linhas)
+    assert avisos == []
+    assert resultado.lojas_vazias() == []
+
+
+def test_resumo_nomeia_as_lojas_que_ficaram_vazias(tmp_path, monkeypatch):
+    from buscaprecos import busca as mod
+
+    cfg = _config_com_uma_loja(tmp_path)
+    monkeypatch.setattr(
+        mod.Buscador, "_criar_cliente", lambda self, loja: ClienteQueNuncaAcha()
+    )
+    linhas = [{cfg.colunas["descricao"]: "PRODUTO",
+               cfg.colunas["ean"]: "7894900010015"}]
+    resultado = mod.Buscador(cfg).executar(linhas)
+    assert "sem nenhum preço: SUPERNOSSO" in resultado.resumo()

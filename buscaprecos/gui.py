@@ -70,16 +70,13 @@ class MsgFim:
 def _rotulo_loja(loja: Any) -> str:
     """Deixa claro de onde vem cada coluna.
 
-    Loja `manual` existe porque nem todo supermercado publica preço na web:
-    Mart Minas e Epa só divulgam encarte em PDF/imagem e app. A coluna aparece
-    na planilha para o cliente digitar, e o rótulo evita que ele espere que o
-    programa preencha.
+    Toda loja aqui é preenchida pelo programa: as de rede por consulta ao site,
+    PAULO pela planilha de estoque. Não existe "coluna para digitar" — listar
+    uma loja que o programa não busca promete o que ele não faz.
     """
-    sufixos = {
-        "estoque": "  (planilha de estoque)",
-        "manual": "  (preencher à mão)",
-    }
-    return loja.nome + sufixos.get(loja.tipo, "")
+    if loja.tipo == "estoque":
+        return f"{loja.nome}  (planilha de estoque)"
+    return loja.nome
 
 
 def abrir_no_sistema(caminho: Path) -> None:
@@ -565,6 +562,7 @@ class Janela:
                 ao_progredir=lambda p: self.fila.put(
                     MsgProgresso(p.loja, p.feitas, p.total, p.preenchidos)
                 ),
+                ao_avisar=lambda texto, nivel: self.fila.put(MsgLog(texto, nivel)),
                 cancelar=self.cancelar,
             )
 
@@ -884,11 +882,11 @@ class DialogoLojas(tk.Toplevel):
 
         ttk.Label(
             corpo,
-            text=("Lojas VTEX e VipCommerce o programa consulta sozinho — inclua "
-                  "aqui mesmo e clique em Testar. Escolha 'manual' para "
-                  "supermercado que não publica preço na web (a coluna aparece "
-                  "na planilha para você digitar). Plataforma diferente dessas "
-                  "precisa de atualização do programa."),
+            text=("Toda loja aqui é consultada pelo programa. Ao incluir, ele "
+                  "faz uma consulta de teste na hora e só cadastra se a loja "
+                  "responder — assim você não descobre no fim de uma busca de "
+                  "meia hora que o cadastro estava errado. Plataforma fora de "
+                  "VTEX e VipCommerce precisa de atualização do programa."),
             wraplength=600,
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, PADDING))
 
@@ -947,7 +945,7 @@ class DialogoLojas(tk.Toplevel):
         self.var_tipo = tk.StringVar(value="vtex")
         combo = ttk.Combobox(
             caixa, textvariable=self.var_tipo,
-            values=["vtex", "vip", "araujo", "manual"], state="readonly", width=8,
+            values=["vtex", "vip", "araujo"], state="readonly", width=8,
         )
         combo.grid(row=0, column=3, padx=(4, 0))
         combo.bind("<<ComboboxSelected>>", lambda _e: self._dica())
@@ -957,9 +955,8 @@ class DialogoLojas(tk.Toplevel):
         ttk.Entry(caixa, textvariable=self.var_endereco).grid(
             row=1, column=1, columnspan=2, sticky="ew", padx=(4, 8), pady=(6, 0)
         )
-        ttk.Button(caixa, text="Incluir", command=self._incluir).grid(
-            row=1, column=3, pady=(6, 0)
-        )
+        self.bt_incluir = ttk.Button(caixa, text="Incluir", command=self._incluir)
+        self.bt_incluir.grid(row=1, column=3, pady=(6, 0))
 
         self.var_dica = tk.StringVar()
         ttk.Label(caixa, textvariable=self.var_dica, foreground="#666666").grid(
@@ -988,21 +985,80 @@ class DialogoLojas(tk.Toplevel):
         self.bt_testar.configure(state="normal" if pode else "disabled")
 
     def _incluir(self) -> None:
-        try:
-            loja = self.cfg.adicionar_loja(
-                self.var_nome.get(), self.var_tipo.get(), self.var_endereco.get()
-            )
-        except ValueError as exc:
-            messagebox.showerror("Não deu", str(exc), parent=self)
+        """Consulta a loja ANTES de cadastrar.
+
+        Endereço ou plataforma errados não dão erro: a coluna fica sempre
+        vazia. Antes disso só se descobria depois de esperar a busca inteira —
+        meia hora para saber que o cadastro estava errado. Agora a consulta é
+        feita na hora e o cadastro só entra se a loja responder.
+        """
+        nome = self.var_nome.get().strip().upper()
+        tipo = self.var_tipo.get()
+        endereco = self.var_endereco.get().strip()
+        if not nome:
+            messagebox.showerror("Não deu", "A loja precisa de um nome.", parent=self)
             return
+        if nome in self.cfg.lojas:
+            messagebox.showerror(
+                "Não deu", f"Já existe uma loja chamada {nome}.", parent=self
+            )
+            return
+        if not endereco:
+            messagebox.showerror(
+                "Não deu", "Informe o endereço da loja.", parent=self
+            )
+            return
+
+        self.bt_incluir.configure(state="disabled")
+        self.bt_testar.configure(state="disabled")
+        self.var_teste.set(f"Consultando {nome} antes de cadastrar…")
+
+        from .config import Loja
+
+        candidata = Loja(nome=nome, tipo=tipo, endereco=endereco, ativa=True)
+        self._testar_loja(candidata, ao_terminar=self._decidir_inclusao)
+
+    def _decidir_inclusao(self, loja: Any, achado: Any, erro: str | None) -> None:
+        self.bt_incluir.configure(state="normal")
+        self._ao_selecionar()
+
+        if achado is not None:
+            self._cadastrar(loja)
+            self.var_teste.set(
+                f"{loja.nome} cadastrada e funcionando: {achado.nome[:44]} — "
+                f"{achado.preco_formatado()}."
+            )
+            return
+
+        motivo = erro or (
+            "a loja respondeu, mas não achou o produto de teste (Coca-Cola lata "
+            "350ml). Pode ser plataforma errada, ou catálogo diferente."
+        )
+        if messagebox.askyesno(
+            "A loja não respondeu como esperado",
+            f"{loja.nome} não devolveu preço no teste.\n\n{motivo}\n\n"
+            "Se cadastrar assim, a coluna provavelmente vai ficar vazia em "
+            "todas as buscas.\n\nCadastrar mesmo assim?",
+            parent=self,
+        ):
+            self._cadastrar(loja)
+            self.var_teste.set(
+                f"{loja.nome} cadastrada, mas o teste falhou — "
+                "confira o endereço e a plataforma."
+            )
+        else:
+            self.var_teste.set(f"{loja.nome} não foi cadastrada.")
+
+    def _cadastrar(self, loja: Any) -> None:
+        self.cfg.lojas[loja.nome] = loja
+        estat = list(self.cfg.estatisticas.get("lojas") or [])
+        if loja.nome not in estat:
+            estat.append(loja.nome)
+        self.cfg.estatisticas["lojas"] = estat
         self.alterou = True
         self.var_nome.set("")
         self.var_endereco.set("")
         self._recarregar()
-        self.var_teste.set(
-            f"{loja.nome} incluída. Clique em Testar antes de rodar a busca — "
-            "endereço errado deixa a coluna sempre vazia."
-        )
 
     def _remover(self) -> None:
         nome = self._selecionada()
@@ -1035,29 +1091,49 @@ class DialogoLojas(tk.Toplevel):
         loja = self.cfg.lojas[nome]
         self.bt_testar.configure(state="disabled")
         self.var_teste.set(f"Consultando {nome}…")
+        self._testar_loja(loja, ao_terminar=self._relatar_teste)
 
+    def _relatar_teste(self, loja: Any, achado: Any, erro: str | None) -> None:
+        if achado is not None:
+            self.var_teste.set(
+                f"{loja.nome} respondeu: {achado.nome} — "
+                f"{achado.preco_formatado()} (via {achado.via})."
+            )
+        elif erro:
+            self.var_teste.set(f"{loja.nome} falhou: {erro}")
+        else:
+            self.var_teste.set(
+                f"{loja.nome} respondeu, mas não achou o produto de teste. "
+                "O endereço pode estar certo e o catálogo diferente."
+            )
+        self._ao_selecionar()
+
+    def _testar_loja(self, loja: Any, *, ao_terminar: Any) -> None:
+        """Consulta real numa thread. Chama `ao_terminar(loja, achado, erro)`.
+
+        Sempre na thread do Tk, via `after(0, …)` — tocar em widget de outra
+        thread é como a janela trava.
+        """
         def trabalhar() -> None:
-            from .busca import Buscador
-
+            achado = None
+            erro: str | None = None
+            buscador = None
             try:
+                from .busca import Buscador
+
                 buscador = Buscador(self.cfg)
                 cliente = buscador._criar_cliente(loja)
                 achado = cliente.buscar(
                     EAN_TESTE, DESC_TESTE, min_score=40, relaxed=True
                 )
-                buscador.fechar()
-                if achado:
-                    msg = (f"{nome} respondeu: {achado.nome} — "
-                           f"{achado.preco_formatado()} (via {achado.via}).")
-                else:
-                    msg = (f"{nome} respondeu, mas não achou o produto de teste. "
-                           "O endereço pode estar certo e o catálogo diferente.")
             except Exception as exc:
-                msg = f"{nome} falhou: {type(exc).__name__}: {exc}"
-            self.after(0, lambda: self._fim_teste(msg))
+                erro = f"{type(exc).__name__}: {exc}"[:180]
+            finally:
+                if buscador is not None:
+                    try:
+                        buscador.fechar()
+                    except Exception:
+                        pass
+            self.after(0, lambda: ao_terminar(loja, achado, erro))
 
         threading.Thread(target=trabalhar, daemon=True).start()
-
-    def _fim_teste(self, msg: str) -> None:
-        self.var_teste.set(msg)
-        self._ao_selecionar()

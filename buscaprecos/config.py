@@ -17,12 +17,17 @@ from typing import Any
 
 # Plataformas com cliente implementado. O cliente pode cadastrar lojas novas
 # destes tipos sozinho; um tipo novo (site próprio, Shopify) exige código.
+# Loja listada no programa é promessa de busca: se aparece em "Onde buscar", o
+# cliente espera que o preço venha preenchido. Por isso não existe tipo
+# "coluna que você digita" — para isso ele cria a coluna na planilha dele, e
+# não precisa do programa. O tipo `manual` foi retirado por esse motivo; a
+# leitura de config antigo ainda o tolera, mas ele não é oferecido nem entra em
+# nenhuma busca.
 TIPOS_LOJA = {
     "vip": "VipCommerce (informe o domínio, ex.: loja.exemplo.com.br)",
     "vtex": "VTEX (informe a URL, ex.: https://www.exemplo.com.br)",
     "araujo": "Araújo (Salesforce Commerce)",
     "estoque": "Planilha de estoque próprio",
-    "manual": "Preenchida à mão (o programa não consulta)",
 }
 
 
@@ -276,6 +281,17 @@ def _mesclar_lojas_do_padrao(
             atual.endereco = endereco
         if nome not in estat:
             estat.append(nome)
+
+    # Desfaz o que a própria atualização cadastrou por engano. Mart Minas e Epa
+    # entraram na v1.1.1 como colunas para digitar — o que não entrega nada e
+    # promete busca que não acontece. Só remove se o tipo continuar `manual`:
+    # se o cliente transformou a entrada em loja de verdade, é dele.
+    for nome in padrao.get("lojas_retiradas") or []:
+        loja = cfg.lojas.get(nome)
+        if loja is not None and loja.tipo == "manual":
+            cfg.lojas.pop(nome, None)
+            estat = [c for c in estat if c != nome]
+            mudancas.append(f"loja {nome} removida (não publica preço na web)")
 
     cfg.estatisticas["lojas"] = estat
     return mudancas
