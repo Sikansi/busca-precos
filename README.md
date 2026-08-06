@@ -283,9 +283,24 @@ Publicado em <https://github.com/Sikansi/busca-precos/releases>. O app consulta
 `releases/latest/download/version.json`, que sempre resolve para o release mais
 recente.
 
-A URL de atualização vai dentro do payload (em `config.padrao.json`) e é o
-**único** campo que uma atualização pode preencher no `config.json` do cliente,
-e só quando está em branco: é infraestrutura, não preferência. Sem isso, uma
+### O que uma atualização pode mudar no config do cliente
+
+O `config.json` do cliente é preservado — certo para as preferências dele,
+errado para o que eu mantenho. A divisão:
+
+| | Quem manda |
+| --- | --- |
+| CEP, colunas, planilha, liga/desliga de loja | **cliente** |
+| URL de atualização (só se estiver em branco) | eu |
+| `tipo` e `endereco` das lojas que vêm no seed | eu |
+| lojas que o cliente cadastrou | **cliente**, intocadas |
+| remover loja | ninguém: atualização nunca remove |
+
+Isso existe porque publicar o Carrefour no seed **não teve efeito nenhum** em
+quem já usava o programa: o seed só é lido quando não há `config.json`. Loja
+nova agora é mesclada, e loja do seed cadastrada com plataforma errada é
+corrigida — senão ela fica vazia para sempre e parece que o supermercado não
+tem os produtos. Toda mudança aparece na área de Detalhes ao abrir. Sem isso, uma
 instalação antiga com o campo vazio nunca receberia correção — e a pasta
 enviada ao cliente **não leva `config.json`** (ele tem os caminhos das
 planilhas da máquina de desenvolvimento), então o seed é o único lugar onde

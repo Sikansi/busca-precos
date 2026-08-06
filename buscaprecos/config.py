@@ -67,6 +67,7 @@ class Config:
     arquivo: Path | None = None
     bruto: dict[str, Any] = field(default_factory=dict)
     raiz_payload: Path | None = None
+    avisos_de_migracao: list[str] = field(default_factory=list)
 
     # -- caminhos ---------------------------------------------------------- #
 
@@ -192,7 +193,92 @@ def carregar_config(
     cfg.arquivo = caminho
     cfg.bruto = dados
     _adotar_url_de_atualizacao(cfg, base_payload)
+    cfg.avisos_de_migracao = _mesclar_lojas_do_padrao(cfg, base_payload)
+    if cfg.avisos_de_migracao:
+        # Grava na hora: sem isso a mudança só valeria em memória e o cliente
+        # veria a loja aparecer e desaparecer conforme salvasse ou não.
+        try:
+            salvar_config(cfg)
+        except Exception:
+            pass
     return cfg
+
+
+def _ler_padrao(base_payload: Path | None) -> dict[str, Any] | None:
+    if base_payload is None:
+        return None
+    padrao = base_payload / ARQUIVO_PADRAO
+    if not padrao.is_file():
+        return None
+    try:
+        return json.loads(padrao.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _mesclar_lojas_do_padrao(
+    cfg: Config, base_payload: Path | None
+) -> list[str]:
+    """Traz lojas novas do payload para o `config.json` já existente.
+
+    O `config.json` do cliente é preservado nas atualizações — certo para CEP,
+    colunas e lojas que ele cadastrou, errado para as lojas que **eu** mantenho.
+    Sem isto, publicar o Carrefour no seed não fazia efeito em nenhuma
+    instalação existente: o seed só é lido quando não há `config.json`. Foi o
+    mesmo furo da URL de atualização, que eu tratei como caso isolado em vez de
+    generalizar.
+
+    A divisão de responsabilidade:
+
+    * loja que vem no seed → **eu** mantenho `tipo` e `endereco` (é
+      infraestrutura: quando uma loja troca de plataforma, a correção precisa
+      chegar); o cliente mantém `ativa`.
+    * loja que o cliente cadastrou → intocada, sempre.
+    * loja que saiu do seed → **nunca** removida.
+
+    Devolve a lista de mudanças, para a interface dizer o que aconteceu.
+    """
+    padrao = _ler_padrao(base_payload)
+    if not padrao:
+        return []
+    lojas_padrao = padrao.get("lojas") or {}
+    if not isinstance(lojas_padrao, dict):
+        return []
+
+    mudancas: list[str] = []
+    estat = list(cfg.estatisticas.get("lojas") or [])
+
+    for nome, info in lojas_padrao.items():
+        if not isinstance(info, dict):
+            continue
+        tipo = str(info.get("tipo") or "")
+        endereco = str(info.get("endereco") or "")
+        atual = cfg.lojas.get(nome)
+
+        if atual is None:
+            cfg.lojas[nome] = Loja(
+                nome=nome, tipo=tipo, endereco=endereco,
+                ativa=bool(info.get("ativa", True)),
+            )
+            if nome not in estat:
+                estat.append(nome)
+            mudancas.append(f"loja {nome} incluída")
+            continue
+
+        # Já existe: corrige só plataforma e endereço, preservando o liga/desliga.
+        if tipo and atual.tipo != tipo:
+            mudancas.append(
+                f"loja {nome}: plataforma {atual.tipo or '(vazia)'} → {tipo}"
+            )
+            atual.tipo = tipo
+        if endereco and atual.endereco != endereco:
+            mudancas.append(f"loja {nome}: endereço atualizado")
+            atual.endereco = endereco
+        if nome not in estat:
+            estat.append(nome)
+
+    cfg.estatisticas["lojas"] = estat
+    return mudancas
 
 
 def _adotar_url_de_atualizacao(cfg: Config, base_payload: Path | None) -> None:
@@ -206,19 +292,10 @@ def _adotar_url_de_atualizacao(cfg: Config, base_payload: Path | None) -> None:
     """
     if str(cfg.atualizacao.get("url_version_json") or "").strip():
         return
-    if base_payload is None:
+    padrao = _ler_padrao(base_payload)
+    if not padrao:
         return
-    padrao = base_payload / ARQUIVO_PADRAO
-    if not padrao.exists():
-        return
-    try:
-        url = str(
-            json.loads(padrao.read_text(encoding="utf-8"))
-            .get("atualizacao", {})
-            .get("url_version_json") or ""
-        ).strip()
-    except Exception:
-        return
+    url = str((padrao.get("atualizacao") or {}).get("url_version_json") or "").strip()
     if url:
         cfg.atualizacao["url_version_json"] = url
 

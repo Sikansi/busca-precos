@@ -727,6 +727,11 @@ class Janela:
 
     def executar(self) -> None:
         self._log(f"Busca de Preços {VERSION}")
+        # Mudanças que a atualização trouxe para o cadastro de lojas. Aparecer
+        # loja nova sem explicação é confuso; e quando o programa corrige a
+        # plataforma de uma loja que o cliente cadastrou, ele tem que saber.
+        for aviso in self.cfg.avisos_de_migracao:
+            self._log(f"Atualização: {aviso}.", "ok")
         self._log(
             "Escolha a planilha, confira as lojas e clique em Buscar preços. "
             "A planilha original não é alterada: o resultado sai em um arquivo novo."

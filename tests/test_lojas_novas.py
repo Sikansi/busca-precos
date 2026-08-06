@@ -247,3 +247,115 @@ def test_campo_interno_de_avisos_nao_vira_coluna():
 
     assert "__avisos__" not in cfg.colunas_de_preco()
     assert "__avisos__" not in COLUNAS_DERIVADAS
+
+
+# --------------------------------------------------------------------------- #
+# Lojas novas chegando por atualização
+# --------------------------------------------------------------------------- #
+
+def _instalacao(tmp_path, mexer=None):
+    """Instalação existente: config.json antigo + payload novo."""
+    import shutil
+
+    payload = tmp_path / "payload" / "9.9.9"
+    payload.mkdir(parents=True)
+    shutil.copy2(RAIZ / "config.padrao.json", payload / "config.padrao.json")
+    shutil.copy2(RAIZ / "categorias.csv", payload / "categorias.csv")
+
+    antigo = json.loads((RAIZ / "config.padrao.json").read_text(encoding="utf-8"))
+    for loja in ("CARREFOUR", "MART MINAS", "EPA"):
+        antigo["lojas"].pop(loja, None)
+    antigo["estatisticas"]["lojas"] = [
+        l for l in antigo["estatisticas"]["lojas"]
+        if l not in ("CARREFOUR", "MART MINAS", "EPA")
+    ]
+    antigo["cep"] = "31000-000"
+    antigo["lojas"]["ATACADAO"]["ativa"] = False
+    if mexer:
+        mexer(antigo)
+    (tmp_path / "config.json").write_text(
+        json.dumps(antigo, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return payload
+
+
+def test_loja_nova_do_seed_chega_em_instalacao_existente(tmp_path):
+    """O config.json do cliente é preservado nas atualizações.
+
+    Publicar o Carrefour no seed não tinha efeito nenhum em quem já usava o
+    programa: o seed só é lido quando não existe config.json. Mesmo furo da URL
+    de atualização, que eu tratei como caso isolado.
+    """
+    payload = _instalacao(tmp_path)
+    cfg = carregar_config(tmp_path, payload)
+    assert "CARREFOUR" in cfg.lojas
+    assert "CARREFOUR" in [lj.nome for lj in cfg.lojas_para_buscar()]
+    assert "CARREFOUR" in cfg.colunas_estatistica()
+
+
+def test_mudanca_e_gravada_no_arquivo(tmp_path):
+    """Só em memória, a loja apareceria e desapareceria conforme o cliente
+    salvasse ou não."""
+    payload = _instalacao(tmp_path)
+    carregar_config(tmp_path, payload)
+    gravado = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert "CARREFOUR" in gravado["lojas"]
+
+
+def test_preferencias_do_cliente_sobrevivem(tmp_path):
+    payload = _instalacao(tmp_path)
+    cfg = carregar_config(tmp_path, payload)
+    assert cfg.cep == "31000-000"
+    assert cfg.lojas["ATACADAO"].ativa is False, "o liga/desliga é do cliente"
+
+
+def test_plataforma_errada_do_cliente_e_corrigida(tmp_path):
+    """Loja que vem no seed é minha para manter: se o cliente cadastrou com a
+    plataforma errada, a atualização conserta em vez de deixar sempre vazia."""
+    def cadastro_errado(c):
+        c["lojas"]["CARREFOUR"] = {
+            "tipo": "vip", "endereco": "carrefour.com.br", "ativa": True,
+        }
+    payload = _instalacao(tmp_path, cadastro_errado)
+    cfg = carregar_config(tmp_path, payload)
+    assert cfg.lojas["CARREFOUR"].tipo == "vtex"
+    assert cfg.lojas["CARREFOUR"].endereco == "https://www.carrefour.com.br"
+    assert any("plataforma" in m for m in cfg.avisos_de_migracao)
+
+
+def test_loja_que_o_cliente_criou_nao_e_tocada(tmp_path):
+    def loja_propria(c):
+        c["lojas"]["MERCADO DO ZE"] = {
+            "tipo": "vtex", "endereco": "https://ze.com.br", "ativa": True,
+        }
+    payload = _instalacao(tmp_path, loja_propria)
+    cfg = carregar_config(tmp_path, payload)
+    assert cfg.lojas["MERCADO DO ZE"].endereco == "https://ze.com.br"
+
+
+def test_loja_desligada_pelo_cliente_nao_e_religada(tmp_path):
+    def desligou_carrefour(c):
+        c["lojas"]["CARREFOUR"] = {
+            "tipo": "vtex", "endereco": "https://www.carrefour.com.br",
+            "ativa": False,
+        }
+    payload = _instalacao(tmp_path, desligou_carrefour)
+    cfg = carregar_config(tmp_path, payload)
+    assert cfg.lojas["CARREFOUR"].ativa is False
+
+
+def test_mudancas_ficam_disponiveis_para_a_interface(tmp_path):
+    payload = _instalacao(tmp_path)
+    cfg = carregar_config(tmp_path, payload)
+    assert cfg.avisos_de_migracao, "aparecer loja nova sem explicação confunde"
+    assert any("CARREFOUR" in m for m in cfg.avisos_de_migracao)
+
+
+def test_sem_payload_nao_mexe_em_nada(tmp_path):
+    """Rodando pela linha de comando não há seed separado: nada a mesclar."""
+    import shutil
+
+    shutil.copy2(RAIZ / "config.padrao.json", tmp_path / "config.padrao.json")
+    shutil.copy2(RAIZ / "categorias.csv", tmp_path / "categorias.csv")
+    cfg = carregar_config(tmp_path)
+    assert cfg.avisos_de_migracao == []
