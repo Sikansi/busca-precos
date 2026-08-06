@@ -190,6 +190,70 @@ FLAVOR_TOKENS = {
 }
 
 
+# Padrões de embalagem múltipla no nome do produto. Sem esta trava, uma
+# consulta de unidade casa com fardo ou kit e grava o preço do conjunto:
+# medido "REFRIG COCA COLA LT 350ML" → R$ 23,34 (fardo de 12) no Supernosso, e
+# "BISC RECH OREO 90G" → R$ 7,78 em "Kit 2 Biscoito Oreo" no Carrefour. A trava
+# de gramatura não pega porque o multipack declara a mesma gramatura unitária.
+RE_PACOTES = (
+    re.compile(r"\bKIT\s*(?:C/\s*)?(\d{1,2})\b"),
+    re.compile(r"\bPACK\s*(?:C/\s*)?(\d{1,2})\b"),
+    re.compile(r"\bLEVE\s*(\d{1,2})\b"),
+    re.compile(r"\bFARDO\s*(?:C/\s*)?(\d{1,2})\b"),
+    re.compile(r"\b(?:CX|CAIXA|DP|DISPLAY|PC|PACOTE)\s*C(?:/|OM)\s*(\d{1,2})\b"),
+    re.compile(r"\bC/\s*(\d{1,2})\b"),
+    re.compile(r"\b(\d{1,2})\s*UNIDADES?\b"),
+    re.compile(r"\b(\d{1,2})\s*UN\b"),
+)
+
+
+def _normalize_com_barra(text: str) -> str:
+    """Como `normalize`, mas preserva a barra.
+
+    `normalize` troca "/" por espaço, e aí "C/6" some: a nota escreve o pacote
+    assim ("BISC CLUB SOCIAL PRESUNT C/6 141G") e o multiplicador passava
+    despercebido. Detectar "C 6" no texto já normalizado seria ambíguo demais
+    ("VIT C 12"), então a barra tem que sobreviver até a detecção.
+    """
+    t = unicodedata.normalize("NFKD", text or "")
+    t = "".join(c for c in t if not unicodedata.combining(c)).upper()
+    t = re.sub(r"[^A-Z0-9/]+", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def multiplicador_de_pacote(text: str) -> int | None:
+    """Quantas unidades o nome declara, se declarar. None quando é unidade.
+
+    Ignora 1, que não muda o preço, e números acima de 30, que quase sempre são
+    gramatura ("350ML C/ 350" não existe, mas "SABONETE 90G" com regex frouxa
+    daria falso positivo).
+    """
+    norm = _normalize_com_barra(text)
+    for regex in RE_PACOTES:
+        m = regex.search(norm)
+        if m:
+            try:
+                n = int(m.group(1))
+            except (TypeError, ValueError):
+                continue
+            if 2 <= n <= 30:
+                return n
+    return None
+
+
+def pacotes_compativeis(query: str, candidate: str) -> bool:
+    """Unidade não casa com fardo, e fardo de 6 não casa com fardo de 12."""
+    mq = multiplicador_de_pacote(query)
+    mc = multiplicador_de_pacote(candidate)
+    if mc is None:
+        # Candidato não declara pacote: aceita. Se a consulta pedia fardo, o
+        # preço unitário é o erro menos grave, e a gramatura ainda filtra.
+        return True
+    if mq is None:
+        return False  # consulta de unidade contra candidato em pacote
+    return mq == mc
+
+
 def brands_compatible(query: str, candidate: str) -> bool:
     """A marca principal da consulta tem que aparecer no candidato."""
     brands = brand_tokens(query)
@@ -266,6 +330,7 @@ def fully_compatible(query: str, candidate: str) -> bool:
     return (
         brands_compatible(query, candidate)
         and measures_compatible(query, candidate)
+        and pacotes_compativeis(query, candidate)
         and variants_compatible(query, candidate)
         and flavors_compatible(query, candidate)
     )

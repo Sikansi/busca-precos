@@ -32,6 +32,7 @@ from .texto import (
     fully_compatible,
     measures_compatible,
     normalize,
+    pacotes_compativeis,
     score_match,
     search_queries,
     validate_candidate,
@@ -54,7 +55,9 @@ def _texto_aceitavel(descricao: str, nome: str, *, relaxed: bool) -> bool:
     """
     if not validate_candidate(descricao, nome, relaxed=relaxed):
         return False
-    return measures_compatible(descricao, nome)
+    if not measures_compatible(descricao, nome):
+        return False
+    return pacotes_compativeis(descricao, nome)
 
 
 VIP_API = "https://services.vipcommerce.com.br/api-admin/v1"
@@ -249,14 +252,29 @@ class ClienteVip:
 # --------------------------------------------------------------------------- #
 
 class ClienteVtex:
-    """Supernosso, Lojas Americanas, Atacadão.
+    """Supernosso, Lojas Americanas, Atacadão, Carrefour.
 
-    `ft=<EAN>` devolve zero resultado nas três lojas — o passe por código de
-    barras da versão anterior era requisição jogada fora e todo match caía no
-    texto. O filtro correto é `fq=alternateIds_Ean:<EAN>`, que resolve
-    Americanas e Atacadão. Supernosso não indexa EAN nesse campo e continua
-    dependendo do texto (registrado como limitação conhecida).
+    A VTEX tem **duas** APIs de busca, e lojas diferentes expõem uma ou outra:
+
+    * **catálogo** (`/api/catalog_system/pub/products/search`) — a antiga.
+      Supernosso, Americanas e Atacadão respondem por aqui. `ft=<EAN>` devolve
+      zero nas três; o filtro que funciona é `fq=alternateIds_Ean:<EAN>`
+      (Supernosso não indexa EAN nem assim e depende do texto).
+    * **Intelligent Search** (`/api/io/_v/api/intelligent-search/…`) — a nova.
+      É a que o Carrefour usa; nele o catálogo antigo devolve **403**.
+
+    O cliente tenta a antiga e, se a loja recusar (403/404), passa a usar a
+    nova pelo resto da execução. Assim `vtex` cobre as duas gerações e quem
+    cadastra uma loja não precisa saber em qual delas ela está.
+
+    Cuidado com a Intelligent Search: o termo vai em `query=` como
+    **parâmetro**. Passado como segmento de caminho ela responde 200 e ignora a
+    busca, devolvendo o catálogo inteiro (`recordsFiltered` de 21 milhões) —
+    falha silenciosa que parece resultado válido.
     """
+
+    API_CATALOGO = "/api/catalog_system/pub/products/search"
+    API_INTELIGENTE = "/api/io/_v/api/intelligent-search/product_search/"
 
     def __init__(
         self,
@@ -265,31 +283,58 @@ class ClienteVtex:
         sessao: requests.Session,
         *,
         timeout: int = 30,
+        api: str = "auto",
     ):
         self.loja = loja
         self.base_url = base_url.rstrip("/")
         self.sessao = sessao
         self.timeout = timeout
+        self._auto = api == "auto"
+        self.api = "catalogo" if self._auto else api
 
-    def _get(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def _get(self, rota: str, params: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+        """Devolve (produtos, status). O status decide se troca de API."""
         resp = self.sessao.get(
-            f"{self.base_url}/api/catalog_system/pub/products/search",
-            params=params,
-            timeout=self.timeout,
+            f"{self.base_url}{rota}", params=params, timeout=self.timeout
         )
         if resp.status_code not in (200, 206):
-            return []
+            return [], resp.status_code
         try:
-            data = resp.json()
+            dados = resp.json()
         except ValueError:
-            return []
-        return data if isinstance(data, list) else []
+            return [], resp.status_code
+        if isinstance(dados, list):  # catálogo antigo
+            return dados, resp.status_code
+        if isinstance(dados, dict):  # Intelligent Search
+            produtos = dados.get("products")
+            return (produtos if isinstance(produtos, list) else []), resp.status_code
+        return [], resp.status_code
+
+    def _buscar(
+        self, params_catalogo: dict[str, Any], params_inteligente: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        if self.api == "catalogo":
+            produtos, status = self._get(self.API_CATALOGO, params_catalogo)
+            if status in (200, 206):
+                return produtos
+            if not self._auto:
+                return []
+            # Loja recusou o catálogo antigo: é das que só têm a API nova.
+            self.api = "inteligente"
+        produtos, _status = self._get(self.API_INTELIGENTE, params_inteligente)
+        return produtos
 
     def buscar_por_texto(self, termo: str) -> list[dict[str, Any]]:
-        return self._get({"ft": termo, "_from": 0, "_to": 19})
+        return self._buscar(
+            {"ft": termo, "_from": 0, "_to": 19},
+            {"query": termo, "count": 20},
+        )
 
     def buscar_por_ean(self, ean: str) -> list[dict[str, Any]]:
-        return self._get({"fq": f"alternateIds_Ean:{ean}", "_from": 0, "_to": 19})
+        return self._buscar(
+            {"fq": f"alternateIds_Ean:{ean}", "_from": 0, "_to": 19},
+            {"query": ean, "count": 20},
+        )
 
     @staticmethod
     def _codigos(item: dict[str, Any]) -> set[str]:

@@ -67,6 +67,21 @@ class MsgFim:
     erro: str | None = None
 
 
+def _rotulo_loja(loja: Any) -> str:
+    """Deixa claro de onde vem cada coluna.
+
+    Loja `manual` existe porque nem todo supermercado publica preço na web:
+    Mart Minas e Epa só divulgam encarte em PDF/imagem e app. A coluna aparece
+    na planilha para o cliente digitar, e o rótulo evita que ele espere que o
+    programa preencha.
+    """
+    sufixos = {
+        "estoque": "  (planilha de estoque)",
+        "manual": "  (preencher à mão)",
+    }
+    return loja.nome + sufixos.get(loja.tipo, "")
+
+
 def abrir_no_sistema(caminho: Path) -> None:
     """Abre arquivo ou pasta no programa padrão do sistema."""
     try:
@@ -180,10 +195,7 @@ class Janela:
         for i, loja in enumerate(self.cfg.lojas.values()):
             var = tk.BooleanVar(value=loja.ativa)
             self.vars_loja[loja.nome] = var
-            rotulo = loja.nome
-            if loja.tipo == "estoque":
-                rotulo += "  (planilha de estoque)"
-            ttk.Checkbutton(caixa, text=rotulo, variable=var).grid(
+            ttk.Checkbutton(caixa, text=_rotulo_loja(loja), variable=var).grid(
                 row=i // 3, column=i % 3, sticky="w", padx=(0, 24), pady=2
             )
         linhas = (len(self.cfg.lojas) + 2) // 3
@@ -283,12 +295,9 @@ class Janela:
         for i, loja in enumerate(self.cfg.lojas.values()):
             var = tk.BooleanVar(value=loja.ativa)
             self.vars_loja[loja.nome] = var
-            rotulo = loja.nome
-            if loja.tipo == "estoque":
-                rotulo += "  (planilha de estoque)"
-            ttk.Checkbutton(self.caixa_onde, text=rotulo, variable=var).grid(
-                row=i // 3, column=i % 3, sticky="w", padx=(0, 24), pady=2
-            )
+            ttk.Checkbutton(
+                self.caixa_onde, text=_rotulo_loja(loja), variable=var
+            ).grid(row=i // 3, column=i % 3, sticky="w", padx=(0, 24), pady=2)
         linhas = (len(self.cfg.lojas) + 2) // 3
         ttk.Button(
             self.caixa_onde, text="Cadastrar lojas…", command=self._abrir_lojas
@@ -870,8 +879,11 @@ class DialogoLojas(tk.Toplevel):
 
         ttk.Label(
             corpo,
-            text=("Você pode incluir lojas VipCommerce e VTEX aqui mesmo. "
-                  "Outras plataformas precisam de atualização do programa."),
+            text=("Lojas VTEX e VipCommerce o programa consulta sozinho — inclua "
+                  "aqui mesmo e clique em Testar. Escolha 'manual' para "
+                  "supermercado que não publica preço na web (a coluna aparece "
+                  "na planilha para você digitar). Plataforma diferente dessas "
+                  "precisa de atualização do programa."),
             wraplength=600,
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, PADDING))
 
@@ -930,7 +942,7 @@ class DialogoLojas(tk.Toplevel):
         self.var_tipo = tk.StringVar(value="vtex")
         combo = ttk.Combobox(
             caixa, textvariable=self.var_tipo,
-            values=["vip", "vtex"], state="readonly", width=8,
+            values=["vtex", "vip", "araujo", "manual"], state="readonly", width=8,
         )
         combo.grid(row=0, column=3, padx=(4, 0))
         combo.bind("<<ComboboxSelected>>", lambda _e: self._dica())

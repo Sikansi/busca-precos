@@ -50,6 +50,21 @@
       "tipo": "araujo",
       "endereco": "https://www.araujo.com.br",
       "ativa": true
+    },
+    "CARREFOUR": {
+      "tipo": "vtex",
+      "endereco": "https://www.carrefour.com.br",
+      "ativa": true
+    },
+    "MART MINAS": {
+      "tipo": "manual",
+      "endereco": "https://www.martminas.com.br",
+      "ativa": true
+    },
+    "EPA": {
+      "tipo": "manual",
+      "endereco": "https://epa.com.br",
+      "ativa": true
     }
   },
   "estatisticas": {
@@ -61,7 +76,10 @@
       "VILLEFORTE",
       "PAULO",
       "ATACADAO",
-      "ARAUJO"
+      "ARAUJO",
+      "CARREFOUR",
+      "MART MINAS",
+      "EPA"
     ],
     "minimo_precos_para_regra": 1,
     "tolerancia_margem": 0.005
@@ -69,7 +87,7 @@
   "busca": {
     "min_score_passe1": 68,
     "min_score_passe2": 52,
-    "lojas_em_paralelo": 6,
+    "lojas_em_paralelo": 7,
     "pausa_entre_itens_seg": 0.08,
     "timeout_seg": 30,
     "tentativas": 3,

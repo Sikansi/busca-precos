@@ -174,7 +174,9 @@ def calcular_derivadas(
             linha["PREÇO PERTIN Estranho"] = pertin
 
         linha["QTD PREÇOS"] = str(len(precos))
-        avisos: list[str] = []
+        # Avisos que a busca anexou à linha (ela conhece o nome do produto
+        # casado; aqui só existem os preços).
+        avisos: list[str] = list(linha.get("__avisos__") or [])
 
         if not precos:
             for col in (

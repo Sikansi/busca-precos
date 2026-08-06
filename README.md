@@ -74,11 +74,39 @@ historico/              planilhas, logs e os scripts da v1 (referência)
 | --- | --- | --- |
 | VERDEMAR | VipCommerce | sim (campo `codigo_barras`) |
 | VILLEFORTE | VipCommerce | sim |
-| SUPERNOSSO | VTEX | não indexa EAN — cai no texto |
-| LOJAS AMERICANAS | VTEX | sim (`fq=alternateIds_Ean`) |
-| ATACADAO | VTEX | sim (`fq=alternateIds_Ean`) |
-| PAULO | `Relatorio_planograma…csv` | EAN → código → ID → nome |
+| SUPERNOSSO | VTEX catálogo | não indexa EAN — cai no texto |
+| LOJAS AMERICANAS | VTEX catálogo | sim (`fq=alternateIds_Ean`) |
+| ATACADAO | VTEX catálogo | sim (`fq=alternateIds_Ean`) |
+| CARREFOUR | VTEX Intelligent Search | sim (`query=<ean>`) |
 | ARAUJO | Salesforce Commerce (HTML) | sim (EAN sai da URL da imagem) |
+| PAULO | `Relatorio_planograma…` | EAN → código → ID → nome |
+| MART MINAS | — | **manual**: não publica preço na web |
+| EPA | — | **manual**: não publica preço na web |
+
+### As duas gerações de VTEX
+
+Lojas VTEX expõem uma de duas APIs, e o cliente tenta as duas em ordem:
+
+- **catálogo** (`/api/catalog_system/pub/products/search`) — Supernosso,
+  Americanas, Atacadão.
+- **Intelligent Search** (`/api/io/_v/api/intelligent-search/…`) — Carrefour,
+  onde o catálogo antigo devolve **403**.
+
+Na Intelligent Search o termo vai em **`query=` como parâmetro**. Passado como
+segmento de caminho ela responde 200 e ignora a busca, devolvendo o catálogo
+inteiro (`recordsFiltered` de 21 milhões) — parece resultado válido e não é.
+
+### Lojas sem preço na web
+
+Mart Minas e Epa foram investigados: o site é institucional (WordPress e
+páginas regionais), não há API de produto em nenhum subdomínio, não são
+VipCommerce, e as ofertas saem em **encarte PDF/imagem e app**. Ficam
+cadastradas como `manual` — a coluna existe na planilha para digitar, e o
+rótulo na tela diz "(preencher à mão)" para ninguém esperar que o programa
+preencha.
+
+Automatizá-las exigiria OCR de encarte (só pega item de promoção) ou engenharia
+reversa do app. Nenhum dos dois se paga.
 
 ## Como o casamento funciona
 
@@ -93,6 +121,11 @@ barreiras independentes do score.
    **gramatura compatível**.
 3. **Fonte permissiva** (estoque por nome, Araújo) — passa por todas as
    barreiras, incluindo variante (ZERO/DIET) e sabor.
+
+O passe por texto também barra **embalagem múltipla**: uma consulta de unidade
+não casa com fardo nem kit. Sem isso, "REFRIG COCA COLA LT 350ML" pegava
+R$ 23,34 no Supernosso (fardo de 12) — a trava de gramatura não ajuda porque o
+fardo declara a mesma gramatura unitária.
 
 Variante e sabor **não** entram no passe por texto de propósito: a nota vem
 abreviada (`LEITE LV ITAMBE TP 1L INTEG`) e exigir a palavra inteira
@@ -122,6 +155,11 @@ era invisível. `OBS BUSCA` avisa quando:
   que nenhuma barreira de texto pega, porque quando a descrição não declara
   gramatura ("DOCE PAÇOCA PAÇOQUITA") nada impede o site devolver o preço da
   caixa fechada. Na planilha de julho isso aconteceu em 43 linhas.
+- **o nome casado por EAN declara embalagem múltipla** ("pode ser embalagem de
+  2"). Carrefour cadastra "Kit 2 Biscoito Oreo" sob o código de barras da
+  unidade. Rejeitar seria pior: Supernosso devolve "Caixa com 12" pelo mesmo
+  caminho com preço unitário correto — então o programa sinaliza em vez de
+  descartar.
 
 ## Planilha de entrada
 

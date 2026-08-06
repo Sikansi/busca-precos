@@ -23,6 +23,7 @@ from .config import Config, Loja
 from .lojas import Achado, ClienteAraujo, ClienteEstoque, ClienteVip, ClienteVtex
 from .precos import clean_ean, is_valid_ean
 from .rede import Disjuntor, LimiteDeTaxa, nova_sessao
+from .texto import multiplicador_de_pacote
 
 
 @dataclass
@@ -258,6 +259,16 @@ class Buscador:
                 preco = achado.preco_formatado()
                 linha[loja.nome] = preco
                 preenchidos_loja += 1
+                # Match exato por EAN cujo nome declara embalagem múltipla:
+                # algumas lojas cadastram o kit sob o código da unidade
+                # (Carrefour, "Kit 2 Biscoito Oreo" a R$ 7,78 no EAN do 90g).
+                # Rejeitar seria pior — Supernosso devolve "Caixa com 12" por
+                # EAN com preço unitário correto. Então sinaliza para conferir.
+                multi = multiplicador_de_pacote(achado.nome)
+                if multi and not multiplicador_de_pacote(descricao):
+                    linha.setdefault("__avisos__", []).append(
+                        f"{loja.nome} pode ser embalagem de {multi}"
+                    )
                 self._registrar(rotulo, loja.nome, {
                     "preco": preco,
                     "nome": achado.nome,
